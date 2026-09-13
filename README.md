@@ -1,6 +1,6 @@
-# SENPlus+ Academy Ultra P5
+# SENPlus+ Academy Ultra P4
 
-SENPlus+ Academy Ultra P5 learning platform.
+SENPlus+ Academy Ultra P4 learning platform.
 
 This repository stores the source code for deploying the app to a normal public hosting provider such as Cloudflare Pages or Vercel, so friends in Hong Kong can access the site without using ChatGPT.
 
@@ -13,7 +13,7 @@ This repository stores the source code for deploying the app to a normal public 
 - Wrong-answer analysis page
 - Feedback/report button
 - Privacy statement
-- P5 Chinese curriculum structure
+- P4 Chinese curriculum structure
 
 ## Recommended Deployment
 

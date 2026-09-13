@@ -12,7 +12,7 @@ const subjects = [
   { name: "科學", note: "探索、觀察與實驗", icon: Microscope, colour: "green" },
 ];
 
-const enabledMathsUnits = new Set(["5N1", "5N2", "5N3", "5N4", "5N5", "5A1", "5A2", "5M1", "5M2", "5S1", "5S2", "5D1"]);
+const enabledMathsUnits = new Set(["4N1", "4N2", "4N3", "4N4", "4N5", "4A1", "4A2", "4M1", "4M2", "4S1", "4S2", "4D1"]);
 
 type Profile = { display_name: string | null; role: string; grade: string; login_allowed: boolean };
 type MathsUnit = { id: number; domain_id: number; code: string; title_zh: string; title_en: string | null; difficulty: number; curriculum_domains: { title_zh: string; code: string } | null };
@@ -201,8 +201,8 @@ export default function Home() {
   const [studentParentRequests, setStudentParentRequests] = useState<ParentRequest[]>([]);
   const [familyLinkMessage, setFamilyLinkMessage] = useState("");
   const currentQuestion = questions[currentIndex] || null;
-  const isReadingUnit = activeUnit ? /^(5CR|5ER)/.test(activeUnit.code) : false;
-  const isWritingUnit = activeUnit?.code.startsWith("5CW") || false;
+  const isReadingUnit = activeUnit ? /^(4CR|4ER)/.test(activeUnit.code) : false;
+  const isWritingUnit = activeUnit?.code.startsWith("4CW") || false;
   const writingCharCount = writingContent.replace(/\\s/g, "").length;
   const displayedOptions = useMemo(() => {
     if (!currentQuestion || !attemptId) return [];
@@ -279,7 +279,14 @@ export default function Home() {
         return;
       }
       const { data, error } = await supabase.from("profiles").select("display_name, role, grade, login_allowed").eq("id", session!.user.id).single();
-      if (error) setMessage("未能讀取用戶資料，請聯絡管理員。"); else setProfile(data);
+      if (error) {
+        setMessage("未能讀取用戶資料，請聯絡管理員。");
+      } else if (data.role === "student" && data.grade !== "P4") {
+        await supabase.auth.signOut();
+        setMessage("這是P4學習平台，請使用P4學生帳戶登入。");
+      } else {
+        setProfile(data);
+      }
     }
     verifyAccess();
   }, [session, supabase, passwordRecoveryMode]);
@@ -299,7 +306,7 @@ export default function Home() {
     if (error || !data?.success) {
       setParentMessage("未能載入家長儀表板。請先確認已執行家長功能設定 SQL。");
     } else {
-      const children = (data.children || []) as ParentChild[];
+      const children = ((data.children || []) as ParentChild[]).filter((child) => child.grade === "P4");
       setParentChildren(children);
       setParentPending((data.pending_requests || []) as ParentPending[]);
       setSelectedParentChildId((current) => current && children.some((child) => child.student_id === current) ? current : children[0]?.student_id || null);
@@ -448,7 +455,7 @@ export default function Home() {
         data: {
           display_name: cleanName,
           requested_role: registrationRole,
-          grade: registrationRole === "student" ? "P5" : null,
+          grade: registrationRole === "student" ? "P4" : null,
           signup_source: "self_service",
         },
       },
@@ -517,9 +524,11 @@ export default function Home() {
     if (attemptResult.error || userResult.error || nodeResult.error) {
       setAdminMessage("未能載入完整學習紀錄，請稍後再試。");
     } else {
-      setAdminAttempts((attemptResult.data || []) as AdminAttempt[]);
-      setAdminUsers((userResult.data || []) as AdminUser[]);
-      setAdminNodes((nodeResult.data || []) as AdminNode[]);
+      const gradeUsers = ((userResult.data || []) as AdminUser[]).filter((user) => user.role !== "student" || user.grade === "P4");
+      const gradeUserIds = new Set(gradeUsers.map((user) => user.id));
+      setAdminAttempts(((attemptResult.data || []) as AdminAttempt[]).filter((attempt) => gradeUserIds.has(attempt.student_id)));
+      setAdminUsers(gradeUsers);
+      setAdminNodes(((nodeResult.data || []) as AdminNode[]).filter((node) => node.code.startsWith("4")));
     }
     setAdminLoading(false);
   }
@@ -528,7 +537,7 @@ export default function Home() {
     if (profile?.role !== "admin") return;
     setView("students"); setStudentsLoading(true); setStudentsMessage("");
     const { data, error } = await supabase.rpc("admin_get_students");
-    if (error) setStudentsMessage("未能載入學生帳戶，請稍後再試。"); else setManagedStudents((data || []) as ManagedStudent[]);
+    if (error) setStudentsMessage("未能載入學生帳戶，請稍後再試。"); else setManagedStudents(((data || []) as ManagedStudent[]).filter((student) => student.grade === "P4"));
     setStudentsLoading(false);
   }
 
@@ -538,8 +547,8 @@ export default function Home() {
     setQualityLoading(true);
     setQualityMessage("");
     const [reportResult, summaryResult] = await Promise.all([
-      supabase.rpc("admin_question_quality_report"),
-      supabase.rpc("admin_question_quality_summary"),
+      supabase.rpc("admin_question_quality_report_for_grade", { p_grade: "P4" }),
+      supabase.rpc("admin_question_quality_summary_for_grade", { p_grade: "P4" }),
     ]);
     if (reportResult.error || summaryResult.error) {
       const error = reportResult.error || summaryResult.error;
@@ -621,9 +630,11 @@ export default function Home() {
     ]);
     if (attemptResult.error || userResult.error || nodeResult.error) setAdminMessage("未能載入完整學習紀錄，請稍後再試。");
     else {
-      setAdminAttempts((attemptResult.data || []) as AdminAttempt[]);
-      setAdminUsers((userResult.data || []) as AdminUser[]);
-      setAdminNodes((nodeResult.data || []) as AdminNode[]);
+      const gradeUsers = ((userResult.data || []) as AdminUser[]).filter((user) => user.role !== "student" || user.grade === "P4");
+      const gradeUserIds = new Set(gradeUsers.map((user) => user.id));
+      setAdminAttempts(((attemptResult.data || []) as AdminAttempt[]).filter((attempt) => gradeUserIds.has(attempt.student_id)));
+      setAdminUsers(gradeUsers);
+      setAdminNodes(((nodeResult.data || []) as AdminNode[]).filter((node) => node.code.startsWith("4")));
     }
     setAdminLoading(false);
   }
@@ -712,7 +723,7 @@ export default function Home() {
     if (studentPassword.length < 8) { setCreateStudentMessage("臨時密碼最少需要8個字元。"); return; }
     if (studentPassword !== confirmStudentPassword) { setCreateStudentMessage("兩次輸入的臨時密碼不一致。"); return; }
     setCreateStudentLoading(true);
-    const { data, error } = await supabase.functions.invoke("admin-create-student", { body: { display_name: studentName.trim(), email: studentEmail.trim().toLowerCase(), password: studentPassword, grade: "P5" } });
+    const { data, error } = await supabase.functions.invoke("admin-create-student", { body: { display_name: studentName.trim(), email: studentEmail.trim().toLowerCase(), password: studentPassword, grade: "P4" } });
     const reason = data?.reason;
     if (error || !data?.success) {
       const reasonMessages: Record<string, string> = {
@@ -737,10 +748,10 @@ export default function Home() {
     setView("maths");
     if (mathsUnits.length) return;
     setUnitsLoading(true); setUnitsMessage("");
-    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P5").eq("code", "mathematics").single();
-    if (subjectError || !subject) { setUnitsMessage("未能讀取P5數學課程，請稍後再試。"); setUnitsLoading(false); return; }
+    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P4").eq("code", "mathematics").single();
+    if (subjectError || !subject) { setUnitsMessage("未能讀取P4數學課程，請稍後再試。"); setUnitsLoading(false); return; }
     const { data: domains, error: domainsError } = await supabase.from("curriculum_domains").select("id, name_zh, code").eq("subject_id", subject.id);
-    if (domainsError || !domains?.length) { setUnitsMessage("未能找到P5數學範疇，請聯絡管理員。"); setUnitsLoading(false); return; }
+    if (domainsError || !domains?.length) { setUnitsMessage("未能找到P4數學範疇，請聯絡管理員。"); setUnitsLoading(false); return; }
     const { data, error } = await supabase.from("curriculum_nodes").select("id, domain_id, code, title_zh, title_en, difficulty").in("domain_id", domains.map((domain) => domain.id)).eq("is_active", true).order("code");
     if (error) {
       setUnitsMessage("未能載入數學單位，請稍後再試。");
@@ -756,10 +767,10 @@ export default function Home() {
     setView("english");
     if (englishUnits.length) return;
     setEnglishUnitsLoading(true); setEnglishUnitsMessage("");
-    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P5").eq("code", "english").single();
-    if (subjectError || !subject) { setEnglishUnitsMessage("未能讀取P5英文課程，請稍後再試。"); setEnglishUnitsLoading(false); return; }
+    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P4").eq("code", "english").single();
+    if (subjectError || !subject) { setEnglishUnitsMessage("未能讀取P4英文課程，請稍後再試。"); setEnglishUnitsLoading(false); return; }
     const { data: domains, error: domainsError } = await supabase.from("curriculum_domains").select("id, name_zh, code").eq("subject_id", subject.id);
-    if (domainsError || !domains?.length) { setEnglishUnitsMessage("未能找到P5英文範疇，請聯絡管理員。"); setEnglishUnitsLoading(false); return; }
+    if (domainsError || !domains?.length) { setEnglishUnitsMessage("未能找到P4英文範疇，請聯絡管理員。"); setEnglishUnitsLoading(false); return; }
     const { data, error } = await supabase.from("curriculum_nodes").select("id, domain_id, code, title_zh, title_en, difficulty").in("domain_id", domains.map((domain) => domain.id)).eq("is_active", true).order("code");
     if (error) {
       setEnglishUnitsMessage("未能載入英文單元，請稍後再試。");
@@ -774,10 +785,10 @@ export default function Home() {
     setView("chinese");
     if (chineseUnits.length) return;
     setChineseUnitsLoading(true); setChineseUnitsMessage("");
-    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P5").eq("code", "chinese").single();
-    if (subjectError || !subject) { setChineseUnitsMessage("未能讀取P5中文課程，請稍後再試。"); setChineseUnitsLoading(false); return; }
+    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P4").eq("code", "chinese").single();
+    if (subjectError || !subject) { setChineseUnitsMessage("未能讀取P4中文課程，請稍後再試。"); setChineseUnitsLoading(false); return; }
     const { data: domains, error: domainsError } = await supabase.from("curriculum_domains").select("id, name_zh, code").eq("subject_id", subject.id);
-    if (domainsError || !domains?.length) { setChineseUnitsMessage("未能找到P5中文範疇，請聯絡管理員。"); setChineseUnitsLoading(false); return; }
+    if (domainsError || !domains?.length) { setChineseUnitsMessage("未能找到P4中文範疇，請聯絡管理員。"); setChineseUnitsLoading(false); return; }
     const { data, error } = await supabase.from("curriculum_nodes").select("id, domain_id, code, title_zh, title_en, difficulty").in("domain_id", domains.map((domain) => domain.id)).eq("is_active", true).order("code");
     if (error) {
       setChineseUnitsMessage("未能載入中文單位，請稍後再試。");
@@ -792,16 +803,16 @@ export default function Home() {
     setView("humanities");
     if (humanitiesUnits.length) return;
     setHumanitiesUnitsLoading(true); setHumanitiesUnitsMessage("");
-    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P5").eq("code", "humanities").single();
-    if (subjectError || !subject) { setHumanitiesUnitsMessage("未能讀取P5人文科課程，請稍後再試。"); setHumanitiesUnitsLoading(false); return; }
+    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P4").eq("code", "humanities").single();
+    if (subjectError || !subject) { setHumanitiesUnitsMessage("未能讀取P4人文科課程，請稍後再試。"); setHumanitiesUnitsLoading(false); return; }
     const { data: domains, error: domainsError } = await supabase.from("curriculum_domains").select("id, name_zh, code").eq("subject_id", subject.id);
-    if (domainsError || !domains?.length) { setHumanitiesUnitsMessage("未能找到P5人文科範疇，請聯絡管理員。"); setHumanitiesUnitsLoading(false); return; }
+    if (domainsError || !domains?.length) { setHumanitiesUnitsMessage("未能找到P4人文科範疇，請聯絡管理員。"); setHumanitiesUnitsLoading(false); return; }
     const { data, error } = await supabase.from("curriculum_nodes").select("id, domain_id, code, title_zh, title_en, difficulty").in("domain_id", domains.map((domain) => domain.id)).eq("is_active", true).order("code");
     if (error) {
       setHumanitiesUnitsMessage("未能載入人文科單元，請稍後再試。");
     } else {
       const domainMap = new Map(domains.map((domain) => [domain.id, { title_zh: domain.name_zh, code: domain.code }]));
-      setHumanitiesUnits((data || []).filter((unit) => /^5H[1-6]$/.test(unit.code)).map((unit) => ({ ...unit, curriculum_domains: domainMap.get(unit.domain_id) || null })) as MathsUnit[]);
+      setHumanitiesUnits((data || []).filter((unit) => /^4H[1-6]$/.test(unit.code)).map((unit) => ({ ...unit, curriculum_domains: domainMap.get(unit.domain_id) || null })) as MathsUnit[]);
     }
     setHumanitiesUnitsLoading(false);
   }
@@ -810,16 +821,16 @@ export default function Home() {
     setView("science");
     if (scienceUnits.length) return;
     setScienceUnitsLoading(true); setScienceUnitsMessage("");
-    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P5").eq("code", "science").single();
-    if (subjectError || !subject) { setScienceUnitsMessage("未能讀取P5科學科課程，請稍後再試。"); setScienceUnitsLoading(false); return; }
+    const { data: subject, error: subjectError } = await supabase.from("curriculum_subjects").select("id").eq("grade", "P4").eq("code", "science").single();
+    if (subjectError || !subject) { setScienceUnitsMessage("未能讀取P4科學科課程，請稍後再試。"); setScienceUnitsLoading(false); return; }
     const { data: domains, error: domainsError } = await supabase.from("curriculum_domains").select("id, name_zh, code").eq("subject_id", subject.id);
-    if (domainsError || !domains?.length) { setScienceUnitsMessage("未能找到P5科學科範疇，請聯絡管理員。"); setScienceUnitsLoading(false); return; }
+    if (domainsError || !domains?.length) { setScienceUnitsMessage("未能找到P4科學科範疇，請聯絡管理員。"); setScienceUnitsLoading(false); return; }
     const { data, error } = await supabase.from("curriculum_nodes").select("id, domain_id, code, title_zh, title_en, difficulty").in("domain_id", domains.map((domain) => domain.id)).eq("is_active", true).order("code");
     if (error) {
       setScienceUnitsMessage("未能載入科學科單元，請稍後再試。");
     } else {
       const domainMap = new Map(domains.map((domain) => [domain.id, { title_zh: domain.name_zh, code: domain.code }]));
-      setScienceUnits((data || []).filter((unit) => /^5SC[1-7]$/.test(unit.code)).map((unit) => ({ ...unit, curriculum_domains: domainMap.get(unit.domain_id) || null })) as MathsUnit[]);
+      setScienceUnits((data || []).filter((unit) => /^4SC[1-7]$/.test(unit.code)).map((unit) => ({ ...unit, curriculum_domains: domainMap.get(unit.domain_id) || null })) as MathsUnit[]);
     }
     setScienceUnitsLoading(false);
   }
@@ -853,10 +864,10 @@ export default function Home() {
 
   async function startUnit(unit: MathsUnit, subject: "maths" | "chinese" | "english" | "humanities" | "science" = activeSubject) {
     if (subject === "maths" && !enabledMathsUnits.has(unit.code)) return;
-    if (subject === "chinese" && unit.code.startsWith("5CW")) { await startWritingTask(unit); return; }
+    if (subject === "chinese" && unit.code.startsWith("4CW")) { await startWritingTask(unit); return; }
     setActiveSubject(subject);
     setActiveUnit(unit); setView("practice"); setPracticeLoading(true); setPracticeMessage(""); setQuestions([]); setCurrentIndex(0); setSelectedAnswer(""); setReadingAnswers({}); setReadingSubmitted([]); setFeedback(null); setCompletedResult(null);
-    const readingMode = /^(5CR|5ER)/.test(unit.code);
+    const readingMode = /^(4CR|4ER)/.test(unit.code);
     const { data: startResult, error: startError } = readingMode
       ? await supabase.rpc("start_reading_practice", { p_node_id: unit.id })
       : await supabase.rpc("start_practice", { p_node_id: unit.id, p_question_count: 10 });
@@ -1013,7 +1024,7 @@ export default function Home() {
           <button type="submit" disabled={resetRequestLoading}>{resetRequestLoading ? "正在發送…" : "發送重設密碼電郵"}</button>
           <p className="privacy-note"><button type="button" onClick={() => { setForgotPasswordMode(false); setResetRequestMessage(""); }}>返回登入</button></p>
         </form> : authMode === "login" ? <form onSubmit={signIn}>
-          <p className="eyebrow">P5 學習平台</p><h2>歡迎回來</h2><p className="form-note">使用你的帳戶登入學習平台。</p>
+          <p className="eyebrow">P4 學習平台</p><h2>歡迎回來</h2><p className="form-note">使用你的帳戶登入學習平台。</p>
           <label>電郵地址<input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></label>
           <label>密碼<input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="輸入密碼" /></label>
           {message && <p className="error-message">{message}</p>}
@@ -1021,9 +1032,9 @@ export default function Home() {
           <p className="forgot-password-link"><button type="button" onClick={() => { setResetEmail(email); setForgotPasswordMode(true); setResetRequestMessage(""); }}>忘記密碼？</button></p>
           <p className="privacy-note">還沒有帳戶？<button type="button" onClick={() => setAuthMode("register")}>學生或家長可自行建立</button><br /><button type="button" onClick={() => setView("privacy")}>查看私隱聲明</button></p>
         </form> : <form onSubmit={registerAccount}>
-          <p className="eyebrow">P5 學習平台</p><h2>建立帳戶</h2><p className="form-note">選擇身分並填寫基本資料。</p>
+          <p className="eyebrow">P4 學習平台</p><h2>建立帳戶</h2><p className="form-note">選擇身分並填寫基本資料。</p>
           <fieldset className="role-choice"><legend>帳戶身分</legend>
-            <label className={registrationRole === "student" ? "selected" : ""}><input type="radio" name="registration-role" value="student" checked={registrationRole === "student"} onChange={() => { setRegistrationRole("student"); setRegistrationConsent(false); }} /><span><strong>學生</strong><small>P5 練習及成績紀錄</small></span></label>
+            <label className={registrationRole === "student" ? "selected" : ""}><input type="radio" name="registration-role" value="student" checked={registrationRole === "student"} onChange={() => { setRegistrationRole("student"); setRegistrationConsent(false); }} /><span><strong>學生</strong><small>P4 練習及成績紀錄</small></span></label>
             <label className={registrationRole === "parent" ? "selected" : ""}><input type="radio" name="registration-role" value="parent" checked={registrationRole === "parent"} onChange={() => { setRegistrationRole("parent"); setRegistrationConsent(false); }} /><span><strong>家長</strong><small>家長帳戶</small></span></label>
           </fieldset>
           <label>姓名<input type="text" required minLength={2} maxLength={60} autoComplete="name" value={registrationName} onChange={(e) => setRegistrationName(e.target.value)} placeholder={registrationRole === "student" ? "學生姓名" : "家長姓名"} /></label>
@@ -1137,11 +1148,11 @@ export default function Home() {
     const displayQuestionText = (question: WrongQuestion | undefined) => {
       const text = question?.question_text || "題目內容暫時未能顯示";
       const code = nodeMap.get(question?.node_id || 0)?.code || "";
-      return /^(5CR|5ER)/.test(code) ? splitReadingQuestion(text).prompt : text;
+      return /^(4CR|4ER)/.test(code) ? splitReadingQuestion(text).prompt : text;
     };
     const readingSources = Array.from(grouped.reduce((map, row) => {
       const node = nodeMap.get(row.question?.node_id || 0);
-      if (!node || !/^(5CR|5ER)/.test(node.code) || !row.question?.question_text) return map;
+      if (!node || !/^(4CR|4ER)/.test(node.code) || !row.question?.question_text) return map;
       const { passage } = splitReadingQuestion(row.question.question_text);
       if (passage !== "閱讀理解") map.set(`${node.code}:${passage}`, { code: node.code, title: node.title_zh, passage });
       return map;
@@ -1191,7 +1202,7 @@ export default function Home() {
       <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>學生個人成績詳情</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
       <section className="dashboard-wrap admin-wrap student-detail-wrap">
         <button className="back-button" onClick={() => setView(studentDetailReturnView)}><ArrowLeft size={18} />{studentDetailReturnView === "students" ? "返回學生帳戶管理" : "返回成績總覽"}</button>
-        <div className="student-detail-hero"><div><p className="eyebrow">個人學習報告</p><h1>{displayName}</h1><p>{student?.email || "P5 學生帳戶"} · {student?.grade || user?.grade || "P5"}</p></div><div className="student-detail-hero-actions"><div className={`student-detail-status ${student?.login_allowed === false ? "blocked" : "allowed"}`}>{student?.login_allowed === false ? "已停用登入" : "帳戶正常"}</div><button onClick={openStudentErrors}><AlertTriangle size={16} />查看錯題分析</button></div></div>
+        <div className="student-detail-hero"><div><p className="eyebrow">個人學習報告</p><h1>{displayName}</h1><p>{student?.email || "P4 學生帳戶"} · {student?.grade || user?.grade || "P4"}</p></div><div className="student-detail-hero-actions"><div className={`student-detail-status ${student?.login_allowed === false ? "blocked" : "allowed"}`}>{student?.login_allowed === false ? "已停用登入" : "帳戶正常"}</div><button onClick={openStudentErrors}><AlertTriangle size={16} />查看錯題分析</button></div></div>
         {adminMessage && <div className="unit-status error-message">{adminMessage}</div>}
         {adminLoading && !adminUsers.length ? <div className="unit-status">正在整理個人成績…</div> : <>
           <div className="metric-grid student-detail-metrics">
@@ -1260,11 +1271,11 @@ export default function Home() {
         <button className="back-button" onClick={() => setView("admin")}><ArrowLeft size={18} />返回成績儀表板</button>
         <div className="admin-heading student-heading"><div><p className="eyebrow">帳戶與裝置</p><h1>學生帳戶管理</h1><p>建立學生帳戶、控制登入權限，並在更換裝置時清除原有裝置紀錄。</p></div><div className="admin-heading-actions"><button className="create-student-button" onClick={() => { setShowCreateStudent((value) => !value); setCreateStudentMessage(""); setCreateStudentSuccess(false); }}>{showCreateStudent ? <X size={17} /> : <Plus size={17} />}{showCreateStudent ? "關閉表格" : "新增學生"}</button><button onClick={openStudentManagement} disabled={studentsLoading}>{studentsLoading ? "更新中…" : "更新學生資料"}</button></div></div>
         {showCreateStudent && <section className="create-student-panel">
-          <div className="create-student-title"><div className="create-student-icon"><UserPlus size={24} /></div><div><p className="eyebrow">建立登入帳戶</p><h2>新增一位P5學生</h2><p>學生可立即使用電郵及臨時密碼登入，最多登記兩部裝置。</p></div></div>
+          <div className="create-student-title"><div className="create-student-icon"><UserPlus size={24} /></div><div><p className="eyebrow">建立登入帳戶</p><h2>新增一位P4學生</h2><p>學生可立即使用電郵及臨時密碼登入，最多登記兩部裝置。</p></div></div>
           <form className="create-student-form" onSubmit={createStudent}>
             <label><span>學生姓名</span><input required minLength={2} maxLength={80} value={studentName} onChange={(event) => setStudentName(event.target.value)} placeholder="例如：陳小明" /></label>
             <label><span>學生電郵</span><input required type="email" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} placeholder="student@example.com" /></label>
-            <label><span>年級</span><input value="P5" readOnly aria-readonly="true" /></label>
+            <label><span>年級</span><input value="P4" readOnly aria-readonly="true" /></label>
             <label><span>臨時密碼</span><input required type="password" minLength={8} maxLength={72} autoComplete="new-password" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} placeholder="最少8個字元" /></label>
             <label><span>確認臨時密碼</span><input required type="password" minLength={8} maxLength={72} autoComplete="new-password" value={confirmStudentPassword} onChange={(event) => setConfirmStudentPassword(event.target.value)} placeholder="再次輸入臨時密碼" /></label>
             <button type="submit" disabled={createStudentLoading}><UserPlus size={18} />{createStudentLoading ? "建立中…" : "建立學生帳戶"}</button>
@@ -1275,7 +1286,7 @@ export default function Home() {
         <div className="student-tools"><div className="student-search"><Search size={18} /><input aria-label="搜尋學生" placeholder="搜尋學生姓名或電郵" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} /></div><div className="student-count"><Users size={18} /><strong>{managedStudents.length}</strong><span>個學生帳戶</span></div></div>
         {studentsMessage && <div className="unit-status error-message">{studentsMessage}</div>}
         {passwordResetStudent && <section className="password-reset-panel"><div className="password-reset-heading"><div className="password-reset-icon"><KeyRound size={23} /></div><div><p className="eyebrow">管理員安全操作</p><h2>重設 {passwordResetStudent.display_name || passwordResetStudent.email} 的密碼</h2><p>設定一次性臨時密碼；原有密碼會立即失效，學生下次登入時必須建立自己的新密碼。</p></div><button type="button" aria-label="關閉重設密碼表格" onClick={() => { setPasswordResetStudent(null); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); }}><X size={19} /></button></div><form onSubmit={resetStudentPassword}><label><span>新臨時密碼</span><input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} placeholder="最少8個字元" /></label><label><span>確認臨時密碼</span><input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={confirmTemporaryPassword} onChange={(event) => setConfirmTemporaryPassword(event.target.value)} placeholder="再次輸入臨時密碼" /></label><button type="submit" disabled={studentActionId === passwordResetStudent.user_id}><KeyRound size={17} />{studentActionId === passwordResetStudent.user_id ? "重設中…" : "確認重設密碼"}</button></form>{passwordResetMessage && <p className={`create-student-result ${passwordResetSuccess ? "success" : "error"}`}>{passwordResetMessage}</p>}<p className="password-reminder">請以安全方式把臨時密碼交給學生，不要在公開群組傳送。</p></section>}
-        {studentsLoading && !managedStudents.length ? <div className="unit-status">正在載入學生帳戶…</div> : <section className="admin-panel student-panel"><div className="admin-table-wrap"><table className="admin-table student-table"><thead><tr><th>學生</th><th>年級</th><th>登入狀態</th><th>裝置</th><th>練習</th><th>平均分</th><th>帳戶操作</th></tr></thead><tbody>{filteredStudents.map((student) => <tr key={student.user_id}><td><button className="student-name-link" onClick={() => openStudentDetail(student.user_id, "students")}><strong>{student.display_name || "未命名學生"}</strong><small>{student.email}</small></button></td><td>{student.grade || "P5"}</td><td><span className={`access-pill ${student.login_allowed ? "allowed" : "blocked"}`}>{student.login_allowed ? "允許登入" : "已停用"}</span></td><td><span className="device-value"><Smartphone size={15} />{student.device_count}／2</span></td><td>{student.completed_count}／{student.attempt_count}</td><td><strong>{student.average_score === null ? "—" : `${Math.round(Number(student.average_score))}分`}</strong></td><td><div className="student-actions"><button className="detail-action" onClick={() => openStudentDetail(student.user_id, "students")}><BarChart3 size={13} />查看成績</button><button className={student.login_allowed ? "disable-action" : "enable-action"} disabled={studentActionId === student.user_id} onClick={() => setStudentAccess(student)}>{student.login_allowed ? "停用登入" : "重新啟用"}</button><button className="reset-action" disabled={studentActionId === student.user_id || Number(student.device_count) === 0} onClick={() => resetStudentDevices(student)}>重設裝置</button><button className="password-action" disabled={studentActionId === student.user_id} onClick={() => { setPasswordResetStudent(student); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); setPasswordResetSuccess(false); window.scrollTo({ top: 260, behavior: "smooth" }); }}><KeyRound size={13} />重設密碼</button></div></td></tr>)}</tbody></table></div>{!filteredStudents.length && <p className="empty-admin">{managedStudents.length ? "找不到符合搜尋條件的學生。" : "目前尚未建立學生帳戶。"}</p>}</section>}
+        {studentsLoading && !managedStudents.length ? <div className="unit-status">正在載入學生帳戶…</div> : <section className="admin-panel student-panel"><div className="admin-table-wrap"><table className="admin-table student-table"><thead><tr><th>學生</th><th>年級</th><th>登入狀態</th><th>裝置</th><th>練習</th><th>平均分</th><th>帳戶操作</th></tr></thead><tbody>{filteredStudents.map((student) => <tr key={student.user_id}><td><button className="student-name-link" onClick={() => openStudentDetail(student.user_id, "students")}><strong>{student.display_name || "未命名學生"}</strong><small>{student.email}</small></button></td><td>{student.grade || "P4"}</td><td><span className={`access-pill ${student.login_allowed ? "allowed" : "blocked"}`}>{student.login_allowed ? "允許登入" : "已停用"}</span></td><td><span className="device-value"><Smartphone size={15} />{student.device_count}／2</span></td><td>{student.completed_count}／{student.attempt_count}</td><td><strong>{student.average_score === null ? "—" : `${Math.round(Number(student.average_score))}分`}</strong></td><td><div className="student-actions"><button className="detail-action" onClick={() => openStudentDetail(student.user_id, "students")}><BarChart3 size={13} />查看成績</button><button className={student.login_allowed ? "disable-action" : "enable-action"} disabled={studentActionId === student.user_id} onClick={() => setStudentAccess(student)}>{student.login_allowed ? "停用登入" : "重新啟用"}</button><button className="reset-action" disabled={studentActionId === student.user_id || Number(student.device_count) === 0} onClick={() => resetStudentDevices(student)}>重設裝置</button><button className="password-action" disabled={studentActionId === student.user_id} onClick={() => { setPasswordResetStudent(student); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); setPasswordResetSuccess(false); window.scrollTo({ top: 260, behavior: "smooth" }); }}><KeyRound size={13} />重設密碼</button></div></td></tr>)}</tbody></table></div>{!filteredStudents.length && <p className="empty-admin">{managedStudents.length ? "找不到符合搜尋條件的學生。" : "目前尚未建立學生帳戶。"}</p>}</section>}
         <aside className="management-note"><UserCog size={21} /><div><strong>安全管理</strong><p>停用登入後，學生即使仍有舊登入狀態也不能讀取課程或開始練習。重設裝置不會刪除學生的成績。</p></div></aside>
       </section>
     </main>;
@@ -1315,7 +1326,7 @@ export default function Home() {
             <article><div className="metric-icon amber"><Users size={22} /></div><span>活躍學習者</span><strong>{activeLearners}</strong><small>曾建立練習紀錄</small></article>
           </div>
           <div className="admin-panels">
-            <section className="admin-panel"><div className="panel-title"><div><p className="eyebrow">學生表現</p><h2>學習者總覽</h2></div><span>{learnerRows.length}人</span></div>{learnerRows.length ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>學習者</th><th>練習</th><th>完成</th><th>平均分</th><th></th></tr></thead><tbody>{learnerRows.map((row, index) => <tr key={row.user?.id || index}><td><button className="student-name-link" disabled={!row.user?.id} onClick={() => row.user?.id && openStudentDetail(row.user.id, "admin")}><strong>{row.user?.display_name || "未命名帳戶"}</strong><small>{row.user?.grade || row.user?.role || "P5"}</small></button></td><td>{row.attempts}</td><td>{row.completed}</td><td><span className={`score-pill ${row.average >= 60 ? "good" : "needs-work"}`}>{row.average}分</span></td><td>{row.user?.id && <button className="table-detail-link" onClick={() => openStudentDetail(row.user!.id, "admin")}>查看詳情</button>}</td></tr>)}</tbody></table></div> : <p className="empty-admin">尚未有學習者練習紀錄。</p>}</section>
+            <section className="admin-panel"><div className="panel-title"><div><p className="eyebrow">學生表現</p><h2>學習者總覽</h2></div><span>{learnerRows.length}人</span></div>{learnerRows.length ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>學習者</th><th>練習</th><th>完成</th><th>平均分</th><th></th></tr></thead><tbody>{learnerRows.map((row, index) => <tr key={row.user?.id || index}><td><button className="student-name-link" disabled={!row.user?.id} onClick={() => row.user?.id && openStudentDetail(row.user.id, "admin")}><strong>{row.user?.display_name || "未命名帳戶"}</strong><small>{row.user?.grade || row.user?.role || "P4"}</small></button></td><td>{row.attempts}</td><td>{row.completed}</td><td><span className={`score-pill ${row.average >= 60 ? "good" : "needs-work"}`}>{row.average}分</span></td><td>{row.user?.id && <button className="table-detail-link" onClick={() => openStudentDetail(row.user!.id, "admin")}>查看詳情</button>}</td></tr>)}</tbody></table></div> : <p className="empty-admin">尚未有學習者練習紀錄。</p>}</section>
             <section className="admin-panel"><div className="panel-title"><div><p className="eyebrow">單位分析</p><h2>數學單位表現</h2></div><span>{unitRows.length}個單位</span></div>{unitRows.length ? <div className="unit-performance">{unitRows.slice(0, 12).map((row) => <div key={row.node?.id || row.node?.code}><div><strong>{row.node?.code || "—"} {row.node?.title_zh || "未知單位"}</strong><span>{row.attempts}次練習 · 平均{row.average}分</span></div><div className="performance-track"><span style={{ width: `${row.average}%` }} /></div></div>)}</div> : <p className="empty-admin">尚未有單位成績可供分析。</p>}</section>
           </div>
           <section className="admin-panel recent-panel"><div className="panel-title"><div><p className="eyebrow">最新動態</p><h2>最近練習紀錄</h2></div><span>最近10項</span></div>{adminAttempts.length ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>學習者</th><th>單位</th><th>狀態</th><th>答對</th><th>分數</th><th>時間</th></tr></thead><tbody>{adminAttempts.slice(0, 10).map((attempt) => <tr key={attempt.id}><td><strong>{userMap.get(attempt.student_id)?.display_name || "未命名帳戶"}</strong></td><td>{nodeMap.get(attempt.node_id)?.code || "—"} {nodeMap.get(attempt.node_id)?.title_zh || ""}</td><td><span className={`status-pill ${attempt.status}`}>{attempt.status === "completed" ? "已完成" : attempt.status === "in_progress" ? "進行中" : "已放棄"}</span></td><td>{attempt.correct_count}／{attempt.total_questions}</td><td><strong>{attempt.score ?? "—"}{attempt.score !== null ? "分" : ""}</strong></td><td>{formatDate(attempt.started_at)}</td></tr>)}</tbody></table></div> : <p className="empty-admin">尚未有練習紀錄。</p>}</section>
@@ -1328,7 +1339,7 @@ export default function Home() {
     const score = completedResult.score ?? 0;
     const resultMessage = score >= 80 ? "表現出色，繼續保持！" : score >= 60 ? "做得不錯，再練習一次會更熟練。" : "每次練習都是進步，看看解題提示再試一次吧。";
     return <main className="dashboard-page">
-      <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+      <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
       <section className="completion-wrap">
         <div className="completion-card">
           <div className="completion-icon"><Trophy size={42} aria-hidden="true" /></div>
@@ -1351,10 +1362,10 @@ export default function Home() {
   }
 
   if (view === "practice") return <main className="dashboard-page">
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap practice-wrap">
       <button className="back-button" onClick={() => setView(activeSubject)}><ArrowLeft size={18} />返回{activeSubject === "chinese" ? "中文" : activeSubject === "english" ? "英文" : activeSubject === "humanities" ? "人文科" : activeSubject === "science" ? "科學科" : "數學"}單位</button>
-      <div className="practice-heading"><span className="unit-code">{activeUnit?.code}</span><p>P5 {activeSubject === "chinese" ? "中文" : activeSubject === "english" ? "英文" : activeSubject === "humanities" ? "人文科" : activeSubject === "science" ? "科學科" : "數學"} · {activeUnit?.curriculum_domains?.title_zh}</p><h1>{activeUnit?.title_zh}</h1></div>
+      <div className="practice-heading"><span className="unit-code">{activeUnit?.code}</span><p>P4 {activeSubject === "chinese" ? "中文" : activeSubject === "english" ? "英文" : activeSubject === "humanities" ? "人文科" : activeSubject === "science" ? "科學科" : "數學"} · {activeUnit?.curriculum_domains?.title_zh}</p><h1>{activeUnit?.title_zh}</h1></div>
       {practiceLoading && !currentQuestion && <div className="unit-status">正在建立10題練習…</div>}
       {practiceMessage && <div className="unit-status error-message">{practiceMessage}</div>}
       {isReadingUnit && questions.length > 0 && <section className="reading-paper">
@@ -1383,10 +1394,10 @@ export default function Home() {
   </main>;
 
   if (view === "maths") return <main className="dashboard-page">
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
-      <div className="units-heading"><div className="subject-icon purple"><Brain size={25} /></div><div><p className="eyebrow">P5 數學</p><h1>選擇學習單位</h1><p>按自己的步伐逐步練習，完成後會即時批改。</p></div></div>
+      <div className="units-heading"><div className="subject-icon purple"><Brain size={25} /></div><div><p className="eyebrow">P4 數學</p><h1>選擇學習單位</h1><p>按自己的步伐逐步練習，完成後會即時批改。</p></div></div>
       {unitsLoading && <div className="unit-status">正在載入12個數學單位…</div>}
       {unitsMessage && <div className="unit-status error-message">{unitsMessage}</div>}
       {!unitsLoading && !unitsMessage && <div className="unit-grid">{mathsUnits.map((unit) => <button className={`unit-card ${enabledMathsUnits.has(unit.code) ? "enabled" : "disabled"}`} key={unit.id} type="button" disabled={!enabledMathsUnits.has(unit.code)} onClick={() => startUnit(unit, "maths")}><span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2><p>{unit.title_en}</p><div><span>{unit.curriculum_domains?.title_zh || "數學"}</span><span>{enabledMathsUnits.has(unit.code) ? "開始練習" : `難度 ${unit.difficulty}/5`}</span></div></button>)}</div>}
@@ -1396,10 +1407,10 @@ export default function Home() {
   </main>;
 
   if (view === "english") return <main className="dashboard-page">
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap english-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
-      <div className="units-heading"><div className="subject-icon blue"><Languages size={25} /></div><div><p className="eyebrow">P5 English</p><h1>Choose a learning unit</h1><p>Complete a 10-question practice. Answers, explanations and mistakes will be recorded automatically.</p></div></div>
+      <div className="units-heading"><div className="subject-icon blue"><Languages size={25} /></div><div><p className="eyebrow">P4 English</p><h1>Choose a learning unit</h1><p>Complete a 10-question practice. Answers, explanations and mistakes will be recorded automatically.</p></div></div>
       {englishUnitsLoading && <div className="unit-status">Loading English units…</div>}
       {englishUnitsMessage && <div className="unit-status error-message">{englishUnitsMessage}</div>}
       {!englishUnitsLoading && !englishUnitsMessage && <div className="unit-grid">{englishUnits.map((unit) => <button className="unit-card english-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "english")}><span className="unit-code">{unit.code}</span><h2>{unit.title_en || unit.title_zh}</h2><p>{unit.title_zh}</p><div><span>{unit.curriculum_domains?.title_zh || "Grammar"}</span><span>Start practice</span></div></button>)}</div>}
@@ -1409,10 +1420,10 @@ export default function Home() {
   </main>;
 
   if (view === "chinese") return <main className="dashboard-page">
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap chinese-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
-      <div className="units-heading"><div className="subject-icon coral"><BookOpen size={25} /></div><div><p className="eyebrow">P5 中文</p><h1>選擇學習單位</h1><p>選擇單位完成10題練習，系統會即時批改並記錄錯題。</p></div></div>
+      <div className="units-heading"><div className="subject-icon coral"><BookOpen size={25} /></div><div><p className="eyebrow">P4 中文</p><h1>選擇學習單位</h1><p>選擇單位完成10題練習，系統會即時批改並記錄錯題。</p></div></div>
       {chineseUnitsLoading && <div className="unit-status">正在載入20個中文單位…</div>}
       {chineseUnitsMessage && <div className="unit-status error-message">{chineseUnitsMessage}</div>}
       {!chineseUnitsLoading && !chineseUnitsMessage && <div className="unit-grid">{chineseUnits.map((unit) => <button className="unit-card chinese-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "chinese")}><span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2><p>{unit.title_en}</p><div><span>{unit.curriculum_domains?.title_zh || "中文"}</span><span>開始練習</span></div></button>)}</div>}
@@ -1422,10 +1433,10 @@ export default function Home() {
   </main>;
 
   if (view === "humanities") return <main className="dashboard-page">
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap humanities-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
-      <div className="units-heading"><div className="subject-icon amber"><Sparkles size={25} /></div><div><p className="eyebrow">P5 人文科</p><h1>選擇學習單元</h1><p>每次隨機完成10題，系統會即時批改、提供解析並記錄錯題。</p></div></div>
+      <div className="units-heading"><div className="subject-icon amber"><Sparkles size={25} /></div><div><p className="eyebrow">P4 人文科</p><h1>選擇學習單元</h1><p>每次隨機完成10題，系統會即時批改、提供解析並記錄錯題。</p></div></div>
       {humanitiesUnitsLoading && <div className="unit-status">正在載入6個人文科單元…</div>}
       {humanitiesUnitsMessage && <div className="unit-status error-message">{humanitiesUnitsMessage}</div>}
       {!humanitiesUnitsLoading && !humanitiesUnitsMessage && <div className="unit-grid">{humanitiesUnits.map((unit) => <button className="unit-card humanities-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "humanities")}><span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2><p>{unit.title_en}</p><div><span>{unit.curriculum_domains?.title_zh || "人文科"}</span><span>開始練習</span></div></button>)}</div>}
@@ -1435,10 +1446,10 @@ export default function Home() {
   </main>;
 
   if (view === "science") return <main className="dashboard-page">
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap science-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
-      <div className="units-heading"><div className="subject-icon green"><Microscope size={25} /></div><div><p className="eyebrow">P5 科學科</p><h1>選擇學習單元</h1><p>每次隨機完成10題，系統會即時批改、提供科學解析並記錄錯題。</p></div></div>
+      <div className="units-heading"><div className="subject-icon green"><Microscope size={25} /></div><div><p className="eyebrow">P4 科學科</p><h1>選擇學習單元</h1><p>每次隨機完成10題，系統會即時批改、提供科學解析並記錄錯題。</p></div></div>
       {scienceUnitsLoading && <div className="unit-status">正在載入7個科學科單元…</div>}
       {scienceUnitsMessage && <div className="unit-status error-message">{scienceUnitsMessage}</div>}
       {!scienceUnitsLoading && !scienceUnitsMessage && <div className="unit-grid">{scienceUnits.map((unit) => <button className="unit-card science-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "science")}><span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2><p>{unit.title_en}</p><div><span>{unit.curriculum_domains?.title_zh || "科學科"}</span><span>開始練習</span></div></button>)}</div>}
@@ -1448,11 +1459,11 @@ export default function Home() {
   </main>;
 
   return <main className="dashboard-page">
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P5</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P4</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap"><div className="welcome-row"><div className="welcome"><p className="eyebrow">今日學習</p><h1>你好，{profile?.display_name || "同學"}</h1><p>選擇一個科目，開始今天的小五練習。</p></div>{profile?.role === "admin" && <button className="admin-entry" onClick={openAdminDashboard}><LayoutDashboard size={20} /><span><strong>管理員儀表板</strong><small>查看學習成績與進度</small></span></button>}</div>
       {profile?.role === "student" && <section className="student-family-panel"><div className="student-family-heading"><div className="parent-link-icon"><Link2 size={23} /></div><div><strong>家長連結</strong><p>產生一次性邀請碼，或處理家長的連結申請。</p></div><button onClick={createStudentParentCode}>{studentLinkCode ? "重新產生" : "產生邀請碼"}</button></div>{studentLinkCode && <div className="student-code-row"><div><span>一次性邀請碼</span><strong>{studentLinkCode}</strong><small>{studentLinkExpiry ? `${new Intl.DateTimeFormat("zh-HK", { hour: "2-digit", minute: "2-digit" }).format(new Date(studentLinkExpiry))} 前有效` : "30分鐘內有效"}</small></div><p>請只把邀請碼交給你的家長或監護人。家長提交後，仍須由你確認。</p></div>}{studentParentRequests.length > 0 && <div className="student-parent-requests">{studentParentRequests.map((request) => <article key={request.parent_id}><div><span className={`request-state ${request.status}`}>{request.status === "pending" ? "等待確認" : "已連結"}</span><strong>{request.display_name}</strong><small>{request.status === "pending" ? "希望查看你的學習成績及錯題" : "可以查看你的學習紀錄"}</small></div><div>{request.status === "pending" && <button className="approve-request" onClick={() => respondToParentRequest(request.parent_id, true)}>批准</button>}<button className="reject-request" onClick={() => respondToParentRequest(request.parent_id, false)}>{request.status === "pending" ? "拒絕" : "解除"}</button></div></article>)}</div>}{familyLinkMessage && <p className="family-link-message">{familyLinkMessage}</p>}</section>}
       <div className="subject-grid">{subjects.map(({ name, note, icon: Icon, colour }) => name === "數學" ? <button className={`subject-card subject-button ${colour}`} key={name} onClick={openMaths}><div className="subject-icon"><Icon size={25} /></div><div><h2>{name}</h2><p>{note}</p></div><span className="coming available">開始學習</span></button> : name === "中文" ? <button className={`subject-card subject-button ${colour}`} key={name} onClick={openChinese}><div className="subject-icon"><Icon size={25} /></div><div><h2>{name}</h2><p>{note}</p></div><span className="coming available">查看課程</span></button> : name === "英文" ? <button className={`subject-card subject-button ${colour}`} key={name} onClick={openEnglish}><div className="subject-icon"><Icon size={25} /></div><div><h2>{name}</h2><p>{note}</p></div><span className="coming available">Start learning</span></button> : name === "人文科" ? <button className={`subject-card subject-button ${colour}`} key={name} onClick={openHumanities}><div className="subject-icon"><Icon size={25} /></div><div><h2>{name}</h2><p>{note}</p></div><span className="coming available">開始學習</span></button> : <button className={`subject-card subject-button ${colour}`} key={name} onClick={openScience}><div className="subject-icon"><Icon size={25} /></div><div><h2>{name}</h2><p>{note}</p></div><span className="coming available">開始學習</span></button>)}</div>
-      <aside className="progress-card"><div><span>你的年級</span><strong>{profile?.grade || "P5"}</strong></div><div><span>學習狀態</span><strong>準備開始</strong></div><div><span>今日目標</span><strong>完成 1 個練習</strong></div></aside>
+      <aside className="progress-card"><div><span>你的年級</span><strong>{profile?.grade || "P4"}</strong></div><div><span>學習狀態</span><strong>準備開始</strong></div><div><span>今日目標</span><strong>完成 1 個練習</strong></div></aside>
       <footer className="site-footer"><button onClick={openFeedback}>問題回報／意見</button><button onClick={() => setView("privacy")}>私隱聲明</button></footer>
     </section>
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>

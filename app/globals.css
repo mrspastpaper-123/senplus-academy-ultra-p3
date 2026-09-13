@@ -130,3 +130,12 @@ button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-
   .quality-editor-modal{min-height:100dvh;max-height:100dvh;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
   .quality-editor-actions{bottom:calc(-19px + env(safe-area-inset-bottom));padding-bottom:calc(13px + env(safe-area-inset-bottom))}
 }
+
+/* P4 theme: sky blue, navy and warm yellow */
+:root{--ink:#17324d;--muted:#5f7182;--cream:#f5f8fb;--teal:#287e9b;--line:#d7e3eb}
+.login-intro{background:linear-gradient(145deg,#dceff8 0%,#f5f8fb 60%,#fff0c9 100%)}
+.dashboard-page{background:#f4f8fb}
+.brand-mark{background:linear-gradient(145deg,#23577a,#2f91ad)}
+.practice-progress span,.performance-track span{background:linear-gradient(90deg,#2f91ad,#f0b83f)}
+.reading-paper-intro{background:linear-gradient(120deg,#173f63,#2d89a6)}
+.subject-card,.unit-card,.question-card{box-shadow:0 10px 35px rgba(35,87,122,.07)}
