@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createClient, Session } from "@supabase/supabase-js";
-import { AlertTriangle, ArrowLeft, BarChart3, BookOpen, Brain, CheckCircle2, Clock3, KeyRound, Languages, LayoutDashboard, Lightbulb, Link2, LogOut, MessageSquareText, Microscope, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Smartphone, Sparkles, Target, Trophy, UserCheck, UserCog, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, BookOpen, Brain, CheckCircle2, Clock3, KeyRound, Languages, LayoutDashboard, Lightbulb, Link2, LogOut, MessageSquareText, Microscope, Pencil, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Smartphone, Sparkles, Target, Trophy, UserCheck, UserCog, UserPlus, Users, X } from "lucide-react";
 
 const subjects = [
   { name: "中文", note: "閱讀、語文與寫作", icon: BookOpen, colour: "coral" },
@@ -34,9 +34,8 @@ type ParentChild = { student_id: string; display_name: string; grade: string; at
 type ParentPending = { student_id: string; display_name: string; requested_at: string };
 type ParentRequest = { parent_id: string; display_name: string; status: "pending" | "approved"; requested_at: string; approved_at: string | null };
 type ParentError = { response_id: number; question_id: number; selected_answer: unknown; answered_at: string; node_code: string; title_zh: string; question_text: string; options: { id: string; text: string }[]; correct_answer: unknown; explanation: string | null; hint: string | null };
-type QualitySummary = { issue_type: string; issue_label: string; issue_count: number };
-type QualityIssue = { question_id: number; node_code: string; node_title: string; issue_type: string; issue_label: string; detail: string; question_text: string };
-type QualityReport = { success: boolean; checked_at: string; published_questions: number; questions_with_issues: number; total_issues: number; summary: QualitySummary[]; issues: QualityIssue[] };
+type QualityIssue = { issue_type: string; severity: "error" | "warning"; question_id: number; node_code: string | null; question_text: string; details: string; options: { id: string; text: string }[] | null; correct_answer: string | null; explanation: string | null; hint: string | null };
+type QualityEditor = { questionId: number; questionText: string; optionA: string; optionB: string; optionC: string; optionD: string; correctAnswer: string; explanation: string; hint: string };
 type AppView = "subjects" | "parent" | "chinese" | "english" | "maths" | "humanities" | "science" | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
 type AuthMode = "login" | "register";
 type RegistrationRole = "student" | "parent";
@@ -146,9 +145,14 @@ export default function Home() {
   const [adminNodes, setAdminNodes] = useState<AdminNode[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminMessage, setAdminMessage] = useState("");
-  const [qualityReport, setQualityReport] = useState<QualityReport | null>(null);
+  const [qualityIssues, setQualityIssues] = useState<QualityIssue[]>([]);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityMessage, setQualityMessage] = useState("");
+  const [qualityFilter, setQualityFilter] = useState("all");
+  const [qualityHasRun, setQualityHasRun] = useState(false);
+  const [qualityEditor, setQualityEditor] = useState<QualityEditor | null>(null);
+  const [qualitySaving, setQualitySaving] = useState(false);
+  const [qualitySaveMessage, setQualitySaveMessage] = useState("");
   const [managedStudents, setManagedStudents] = useState<ManagedStudent[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
   const [studentsLoading, setStudentsLoading] = useState(false);
@@ -532,12 +536,62 @@ export default function Home() {
     setQualityLoading(true);
     setQualityMessage("");
     const { data, error } = await supabase.rpc("admin_question_quality_report");
-    if (error || !data?.success) {
-      setQualityMessage("未能執行題庫檢查。請先在 Supabase 執行題庫品質檢查 SQL。");
+    if (error) {
+      setQualityMessage(error.message.includes("管理員") ? "目前帳戶沒有執行題庫檢查的權限。" : "未能執行題庫檢查，請稍後再試。");
     } else {
-      setQualityReport(data as QualityReport);
+      setQualityIssues((data || []) as QualityIssue[]);
+      setQualityHasRun(true);
     }
     setQualityLoading(false);
+  }
+
+  function openQualityEditor(issue: QualityIssue) {
+    const availableOptions = Array.isArray(issue.options) ? issue.options : [];
+    const option = (id: string) => availableOptions.find((item) => item.id.toLowerCase() === id)?.text || "";
+    setQualityEditor({
+      questionId: issue.question_id,
+      questionText: issue.question_text,
+      optionA: option("a"),
+      optionB: option("b"),
+      optionC: option("c"),
+      optionD: option("d"),
+      correctAnswer: (issue.correct_answer || "a").toLowerCase(),
+      explanation: issue.explanation || "",
+      hint: issue.hint || "",
+    });
+    setQualitySaveMessage("");
+  }
+
+  function updateQualityEditor(field: keyof QualityEditor, value: string | number) {
+    setQualityEditor((current) => current ? { ...current, [field]: value } : current);
+  }
+
+  async function saveQualityCorrection(event: FormEvent) {
+    event.preventDefault();
+    if (!qualityEditor || profile?.role !== "admin") return;
+    setQualitySaving(true);
+    setQualitySaveMessage("");
+    const { data, error } = await supabase.rpc("admin_update_question_quality", {
+      p_question_id: qualityEditor.questionId,
+      p_question_text: qualityEditor.questionText,
+      p_option_a: qualityEditor.optionA,
+      p_option_b: qualityEditor.optionB,
+      p_option_c: qualityEditor.optionC,
+      p_option_d: qualityEditor.optionD,
+      p_correct_answer: qualityEditor.correctAnswer,
+      p_explanation: qualityEditor.explanation,
+      p_hint: qualityEditor.hint,
+    });
+    if (error) {
+      setQualitySaveMessage(error.message || "未能儲存修正，請檢查所有欄位。");
+      setQualitySaving(false);
+      return;
+    }
+    const remaining = Number(data?.remaining_issues || 0);
+    setQualityEditor(null);
+    setQualitySaveMessage(remaining ? "修正已儲存，但這題仍有其他項目需要處理。" : "修正已儲存，這題已通過檢查。");
+    setQualitySaving(false);
+    await openQuestionQualityAudit();
   }
 
   async function openStudentDetail(studentId: string, returnView: "admin" | "students") {
@@ -1146,32 +1200,43 @@ export default function Home() {
   }
 
   if (view === "quality" && profile?.role === "admin") {
-    const issueCount = (type: string) => qualityReport?.summary.find((item) => item.issue_type === type)?.issue_count || 0;
-    const cleanRate = qualityReport?.published_questions ? Math.round((qualityReport.published_questions - qualityReport.questions_with_issues) / qualityReport.published_questions * 100) : 0;
+    const issueTypeLabels: Record<string, string> = {
+      duplicate_question: "重複題目",
+      missing_or_invalid_answer: "答案缺失／無效",
+      invalid_option_count: "選項數量錯誤",
+      duplicate_or_empty_options: "選項重複／留空",
+      currency_symbol_review: "貨幣符號覆核",
+    };
+    const affectedQuestions = new Set(qualityIssues.map((issue) => issue.question_id)).size;
+    const errorCount = qualityIssues.filter((issue) => issue.severity === "error").length;
+    const warningCount = qualityIssues.filter((issue) => issue.severity === "warning").length;
+    const filteredQualityIssues = qualityFilter === "all" ? qualityIssues : qualityIssues.filter((issue) => issue.issue_type === qualityFilter);
     return <main className="dashboard-page">
       <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>題庫品質檢查</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
       <section className="dashboard-wrap admin-wrap quality-wrap">
         <button className="back-button" onClick={() => setView("admin")}><ArrowLeft size={18} />返回管理員儀表板</button>
-        <div className="admin-heading"><div><p className="eyebrow">自動品質審核</p><h1>題庫健康狀況</h1><p>掃描所有已發布題目，檢查重複題、答案、選項及香港貨幣符號。</p></div><div className="admin-heading-actions"><button onClick={openQuestionQualityAudit} disabled={qualityLoading}><RefreshCw size={17} />{qualityLoading ? "檢查中…" : "重新檢查"}</button></div></div>
+        <div className="admin-heading"><div><p className="eyebrow">自動品質審核</p><h1>題庫健康狀況</h1><p>掃描所有題目，檢查重複題、答案、四個選項及香港貨幣符號。</p></div><div className="admin-heading-actions"><button onClick={openQuestionQualityAudit} disabled={qualityLoading}><RefreshCw size={17} />{qualityLoading ? "檢查中…" : "執行品質檢查"}</button></div></div>
         {qualityMessage && <div className="unit-status error-message">{qualityMessage}</div>}
-        {qualityLoading && !qualityReport ? <div className="unit-status">正在掃描全部題目…</div> : qualityReport && <>
+        {qualitySaveMessage && <div className="quality-save-notice">{qualitySaveMessage}</div>}
+        {qualityLoading && !qualityHasRun ? <div className="unit-status">正在掃描全部題目…</div> : qualityHasRun && <>
           <div className="metric-grid quality-metrics">
-            <article><div className="metric-icon teal"><Search size={22} /></div><span>已檢查題目</span><strong>{qualityReport.published_questions}</strong><small>全部已發布題目</small></article>
-            <article><div className="metric-icon green"><CheckCircle2 size={22} /></div><span>題庫健康率</span><strong>{cleanRate}<b>%</b></strong><small>沒有發現指定問題</small></article>
-            <article><div className="metric-icon amber"><AlertTriangle size={22} /></div><span>受影響題目</span><strong>{qualityReport.questions_with_issues}</strong><small>可能同時有多項問題</small></article>
-            <article><div className="metric-icon purple"><ShieldCheck size={22} /></div><span>問題總數</span><strong>{qualityReport.total_issues}</strong><small>最近一次掃描結果</small></article>
+            <article><div className="metric-icon purple"><ShieldCheck size={22} /></div><span>問題總數</span><strong>{qualityIssues.length}</strong><small>最近一次檢查結果</small></article>
+            <article><div className="metric-icon amber"><AlertTriangle size={22} /></div><span>受影響題目</span><strong>{affectedQuestions}</strong><small>同一題可能有多項問題</small></article>
+            <article><div className="metric-icon teal"><Search size={22} /></div><span>錯誤</span><strong>{errorCount}</strong><small>需要優先修正</small></article>
+            <article><div className="metric-icon green"><CheckCircle2 size={22} /></div><span>警告</span><strong>{warningCount}</strong><small>需要人工覆核</small></article>
           </div>
           <section className="quality-check-grid">
-            <article><span>重複題目</span><strong>{issueCount("duplicate_question")}</strong></article>
-            <article><span>答案缺失</span><strong>{issueCount("missing_answer")}</strong></article>
-            <article><span>選項數量／重複</span><strong>{issueCount("option_count") + issueCount("duplicate_options")}</strong></article>
-            <article><span>£ 貨幣符號</span><strong>{issueCount("currency_symbol")}</strong></article>
+            <article><span>重複題目</span><strong>{qualityIssues.filter((issue) => issue.issue_type === "duplicate_question").length}</strong></article>
+            <article><span>答案缺失／無效</span><strong>{qualityIssues.filter((issue) => issue.issue_type === "missing_or_invalid_answer").length}</strong></article>
+            <article><span>選項問題</span><strong>{qualityIssues.filter((issue) => issue.issue_type === "invalid_option_count" || issue.issue_type === "duplicate_or_empty_options").length}</strong></article>
+            <article><span>貨幣符號覆核</span><strong>{qualityIssues.filter((issue) => issue.issue_type === "currency_symbol_review").length}</strong></article>
           </section>
-          <section className="admin-panel quality-list-panel"><div className="panel-title"><div><p className="eyebrow">檢查結果</p><h2>{qualityReport.total_issues ? "需要處理的題目" : "沒有發現問題"}</h2></div><span>{qualityReport.total_issues}項</span></div>
-            {qualityReport.issues.length ? <div className="quality-issue-list">{qualityReport.issues.map((issue, index) => <article key={`${issue.question_id}-${issue.issue_type}-${index}`}><div><span className={`quality-issue-tag ${issue.issue_type}`}>{issue.issue_label}</span><b>{issue.node_code} {issue.node_title}</b><small>題目 ID：{issue.question_id}</small></div><p>{issue.question_text.slice(0, 260)}{issue.question_text.length > 260 ? "…" : ""}</p><strong>{issue.detail}</strong></article>)}</div> : <div className="quality-clean"><CheckCircle2 size={48} /><h3>題庫檢查通過</h3><p>沒有發現重複題、答案缺失、重複選項或 £ 貨幣符號。</p></div>}
+          <section className="admin-panel quality-list-panel"><div className="quality-list-heading"><div className="panel-title"><div><p className="eyebrow">檢查結果</p><h2>{qualityIssues.length ? "需要處理的題目" : "沒有發現問題"}</h2></div><span>{filteredQualityIssues.length}項</span></div>{qualityIssues.length > 0 && <label className="quality-filter"><span>問題類型</span><select value={qualityFilter} onChange={(event) => setQualityFilter(event.target.value)}><option value="all">全部問題</option>{Object.entries(issueTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}</div>
+            {filteredQualityIssues.length ? <div className="quality-issue-list">{filteredQualityIssues.map((issue, index) => <article key={`${issue.question_id}-${issue.issue_type}-${index}`}><div><span className={`quality-issue-tag ${issue.issue_type}`}>{issueTypeLabels[issue.issue_type] || issue.issue_type}</span><b>{issue.node_code || "未分類單元"}</b><small>題目 ID：{issue.question_id}</small></div><p>{issue.question_text.slice(0, 260)}{issue.question_text.length > 260 ? "…" : ""}</p><strong>{issue.details}</strong><button className="quality-edit-button" onClick={() => openQualityEditor(issue)}><Pencil size={15} />逐題修正</button></article>)}</div> : qualityIssues.length ? <div className="quality-clean"><Search size={44} /><h3>此類型沒有問題</h3><p>請選擇其他問題類型或顯示全部結果。</p></div> : <div className="quality-clean"><CheckCircle2 size={48} /><h3>題庫檢查通過</h3><p>沒有發現重複題、答案缺失、選項問題或需要覆核的貨幣符號。</p></div>}
           </section>
         </>}
       </section>
+      {qualityEditor && <div className="quality-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !qualitySaving) setQualityEditor(null); }}><section className="quality-editor-modal" role="dialog" aria-modal="true" aria-labelledby="quality-editor-title"><div className="quality-editor-heading"><div><p className="eyebrow">題目 ID：{qualityEditor.questionId}</p><h2 id="quality-editor-title">逐題修正</h2></div><button type="button" aria-label="關閉修正視窗" disabled={qualitySaving} onClick={() => setQualityEditor(null)}><X size={20} /></button></div><form onSubmit={saveQualityCorrection}><label className="quality-editor-wide"><span>題目文字</span><textarea required value={qualityEditor.questionText} onChange={(event) => updateQualityEditor("questionText", event.target.value)} /></label><div className="quality-option-grid">{(["A", "B", "C", "D"] as const).map((letter) => { const field = `option${letter}` as "optionA" | "optionB" | "optionC" | "optionD"; return <label key={letter}><span>選項 {letter}</span><input required value={qualityEditor[field]} onChange={(event) => updateQualityEditor(field, event.target.value)} /></label>; })}</div><label><span>正確答案</span><select value={qualityEditor.correctAnswer} onChange={(event) => updateQualityEditor("correctAnswer", event.target.value)}><option value="a">A</option><option value="b">B</option><option value="c">C</option><option value="d">D</option></select></label><label className="quality-editor-wide"><span>提示</span><textarea value={qualityEditor.hint} onChange={(event) => updateQualityEditor("hint", event.target.value)} /></label><label className="quality-editor-wide"><span>答案解析</span><textarea value={qualityEditor.explanation} onChange={(event) => updateQualityEditor("explanation", event.target.value)} /></label>{qualitySaveMessage && <p className="quality-editor-message">{qualitySaveMessage}</p>}<div className="quality-editor-actions"><button type="button" disabled={qualitySaving} onClick={() => setQualityEditor(null)}>取消</button><button type="submit" disabled={qualitySaving}><ShieldCheck size={17} />{qualitySaving ? "儲存並檢查中…" : "儲存並重新檢查"}</button></div></form></section></div>}
     </main>;
   }
 
