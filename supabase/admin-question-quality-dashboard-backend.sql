@@ -74,6 +74,38 @@ $$;
 revoke all on function public.admin_question_quality_report() from public;
 grant execute on function public.admin_question_quality_report() to authenticated;
 
+create or replace function public.admin_question_quality_summary()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  result jsonb;
+begin
+  if not public.is_current_user_admin() then
+    raise exception '只有管理員可以執行題庫品質檢查。'
+      using errcode = '42501';
+  end if;
+
+  select jsonb_build_object(
+    'total_questions', (select count(*) from public.questions),
+    'total_issues', count(*),
+    'affected_questions', count(distinct i.question_id),
+    'error_count', count(*) filter (where i.severity = 'error'),
+    'warning_count', count(*) filter (where i.severity = 'warning')
+  )
+  into result
+  from public.question_quality_issues i;
+
+  return result;
+end;
+$$;
+
+revoke all on function public.admin_question_quality_summary() from public;
+grant execute on function public.admin_question_quality_summary() to authenticated;
+
 create or replace function public.admin_update_question_quality(
   p_question_id bigint,
   p_question_text text,
@@ -179,4 +211,3 @@ select
   to_regprocedure(
     'public.admin_update_question_quality(bigint,text,text,text,text,text,text,text,text)'
   ) is not null as correction_ready;
-

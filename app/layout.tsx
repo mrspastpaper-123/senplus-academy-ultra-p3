@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "SENPlus+ Academy Ultra P5",
   description: "香港小五個人化學習與練習平台",
+  other: { "codex-preview": "development" },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

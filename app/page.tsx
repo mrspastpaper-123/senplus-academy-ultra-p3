@@ -35,6 +35,7 @@ type ParentPending = { student_id: string; display_name: string; requested_at: s
 type ParentRequest = { parent_id: string; display_name: string; status: "pending" | "approved"; requested_at: string; approved_at: string | null };
 type ParentError = { response_id: number; question_id: number; selected_answer: unknown; answered_at: string; node_code: string; title_zh: string; question_text: string; options: { id: string; text: string }[]; correct_answer: unknown; explanation: string | null; hint: string | null };
 type QualityIssue = { issue_type: string; severity: "error" | "warning"; question_id: number; node_code: string | null; question_text: string; details: string; options: { id: string; text: string }[] | null; correct_answer: string | null; explanation: string | null; hint: string | null };
+type QualitySummary = { total_questions: number; total_issues: number; affected_questions: number; error_count: number; warning_count: number };
 type QualityEditor = { questionId: number; questionText: string; optionA: string; optionB: string; optionC: string; optionD: string; correctAnswer: string; explanation: string; hint: string };
 type AppView = "subjects" | "parent" | "chinese" | "english" | "maths" | "humanities" | "science" | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
 type AuthMode = "login" | "register";
@@ -150,6 +151,7 @@ export default function Home() {
   const [qualityMessage, setQualityMessage] = useState("");
   const [qualityFilter, setQualityFilter] = useState("all");
   const [qualityHasRun, setQualityHasRun] = useState(false);
+  const [qualitySummary, setQualitySummary] = useState<QualitySummary | null>(null);
   const [qualityEditor, setQualityEditor] = useState<QualityEditor | null>(null);
   const [qualitySaving, setQualitySaving] = useState(false);
   const [qualitySaveMessage, setQualitySaveMessage] = useState("");
@@ -535,11 +537,20 @@ export default function Home() {
     setView("quality");
     setQualityLoading(true);
     setQualityMessage("");
-    const { data, error } = await supabase.rpc("admin_question_quality_report");
-    if (error) {
-      setQualityMessage(error.message.includes("管理員") ? "目前帳戶沒有執行題庫檢查的權限。" : "未能執行題庫檢查，請稍後再試。");
+    const [reportResult, summaryResult] = await Promise.all([
+      supabase.rpc("admin_question_quality_report"),
+      supabase.rpc("admin_question_quality_summary"),
+    ]);
+    if (reportResult.error || summaryResult.error) {
+      const error = reportResult.error || summaryResult.error;
+      setQualityHasRun(false);
+      setQualitySummary(null);
+      setQualityMessage(error?.message.includes("管理員")
+        ? "目前帳戶沒有執行題庫檢查的權限，請重新登入管理員帳戶。"
+        : `未能執行題庫檢查：${error?.message || "未知錯誤"}`);
     } else {
-      setQualityIssues((data || []) as QualityIssue[]);
+      setQualityIssues((reportResult.data || []) as QualityIssue[]);
+      setQualitySummary(summaryResult.data as QualitySummary);
       setQualityHasRun(true);
     }
     setQualityLoading(false);
@@ -1207,9 +1218,9 @@ export default function Home() {
       duplicate_or_empty_options: "選項重複／留空",
       currency_symbol_review: "貨幣符號覆核",
     };
-    const affectedQuestions = new Set(qualityIssues.map((issue) => issue.question_id)).size;
-    const errorCount = qualityIssues.filter((issue) => issue.severity === "error").length;
-    const warningCount = qualityIssues.filter((issue) => issue.severity === "warning").length;
+    const affectedQuestions = qualitySummary?.affected_questions ?? new Set(qualityIssues.map((issue) => issue.question_id)).size;
+    const errorCount = qualitySummary?.error_count ?? qualityIssues.filter((issue) => issue.severity === "error").length;
+    const warningCount = qualitySummary?.warning_count ?? qualityIssues.filter((issue) => issue.severity === "warning").length;
     const filteredQualityIssues = qualityFilter === "all" ? qualityIssues : qualityIssues.filter((issue) => issue.issue_type === qualityFilter);
     return <main className="dashboard-page">
       <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>題庫品質檢查</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
@@ -1220,7 +1231,7 @@ export default function Home() {
         {qualitySaveMessage && <div className="quality-save-notice">{qualitySaveMessage}</div>}
         {qualityLoading && !qualityHasRun ? <div className="unit-status">正在掃描全部題目…</div> : qualityHasRun && <>
           <div className="metric-grid quality-metrics">
-            <article><div className="metric-icon purple"><ShieldCheck size={22} /></div><span>問題總數</span><strong>{qualityIssues.length}</strong><small>最近一次檢查結果</small></article>
+            <article><div className="metric-icon purple"><ShieldCheck size={22} /></div><span>已掃描題目</span><strong>{qualitySummary?.total_questions ?? 0}</strong><small>Supabase 題庫總數</small></article>
             <article><div className="metric-icon amber"><AlertTriangle size={22} /></div><span>受影響題目</span><strong>{affectedQuestions}</strong><small>同一題可能有多項問題</small></article>
             <article><div className="metric-icon teal"><Search size={22} /></div><span>錯誤</span><strong>{errorCount}</strong><small>需要優先修正</small></article>
             <article><div className="metric-icon green"><CheckCircle2 size={22} /></div><span>警告</span><strong>{warningCount}</strong><small>需要人工覆核</small></article>
