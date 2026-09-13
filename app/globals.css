@@ -84,3 +84,49 @@
 .student-family-panel{margin:20px 0 28px;padding:20px 22px;border:1px solid #cfe0da;border-radius:18px;background:#fff;box-shadow:0 8px 25px rgba(30,61,54,.045)}.student-family-heading{display:flex;align-items:center;gap:13px}.student-family-heading>div:nth-child(2){flex:1}.student-family-heading strong{font-size:17px}.student-family-heading p{margin:5px 0 0;color:var(--muted);font-size:12px}.student-family-heading>button{border:0;border-radius:10px;background:var(--teal);color:#fff;padding:10px 13px;font-weight:800;cursor:pointer}.student-code-row{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;margin-top:16px;padding:15px;border-radius:14px;background:#eef8f5}.student-code-row>div{min-width:160px}.student-code-row span,.student-code-row small{display:block;color:var(--muted);font-size:11px}.student-code-row strong{display:block;margin:4px 0;font-size:26px;letter-spacing:.16em;color:var(--teal)}.student-code-row p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}.student-parent-requests{display:grid;gap:9px;margin-top:14px}.student-parent-requests article{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 14px;border:1px solid #e2eae6;border-radius:13px}.student-parent-requests article>div:first-child{display:grid;grid-template-columns:auto 1fr;gap:4px 9px;align-items:center}.student-parent-requests small{grid-column:2;color:var(--muted)}.request-state{padding:5px 7px;border-radius:7px;font-size:10px;font-weight:800}.request-state.pending{background:#fff2ce;color:#8b6516}.request-state.approved{background:#e7f7ed;color:#22633c}.student-parent-requests article>div:last-child{display:flex;gap:7px}.student-parent-requests button{border-radius:9px;padding:8px 11px;font-size:11px;font-weight:800;cursor:pointer}.approve-request{border:0;background:var(--teal);color:#fff}.reject-request{border:1px solid #e3c8c2;background:#fff;color:#913e35}.family-link-message{margin:13px 0 0;padding:10px 12px;border-radius:10px;background:#eef5f2;color:var(--teal);font-size:12px;font-weight:700}
 @media(max-width:900px){.parent-link-panel,.parent-panels{grid-template-columns:1fr}.parent-link-panel form{width:100%}.parent-link-panel input{flex:1}.parent-heading{align-items:flex-start}.parent-metrics{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.parent-heading{display:block}.parent-heading h1{font-size:34px}.parent-heading>button{margin-top:14px}.parent-link-panel{padding:18px}.parent-link-copy{align-items:flex-start}.parent-link-panel form{display:grid}.parent-link-panel input{width:100%}.parent-child-hero{align-items:flex-start;flex-direction:column}.parent-metrics{grid-template-columns:1fr}.student-family-heading{align-items:flex-start;flex-wrap:wrap}.student-family-heading>div:nth-child(2){min-width:calc(100% - 64px)}.student-family-heading>button{width:100%}.student-code-row{grid-template-columns:1fr}.student-parent-requests article{align-items:flex-start;flex-direction:column}.student-parent-requests article>div:last-child{width:100%}.student-parent-requests article>div:last-child button{flex:1}}
+
+/* Mobile and tablet resilience: long questions, data tables, controls and scrolling */
+html{min-height:100%;overflow-x:hidden;scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{min-height:100%;min-height:100dvh;overflow-x:hidden;overflow-y:auto;overscroll-behavior-y:auto;touch-action:pan-y}
+main,.dashboard-page,.dashboard-wrap,.practice-wrap,.question-card,.reading-paper,.reading-pair,.reading-passage,.reading-question-group,.reading-question,.option{min-width:0;max-width:100%}
+.question-card h2,.reading-question h3,.reading-passage>div,.option span,.feedback p,.wrong-question-card h3,.answer-comparison strong,.explanation-box p,.quality-issue-list article p,.admin-table td,.admin-table th{overflow-wrap:anywhere;word-break:break-word}
+.question-card h2,.reading-question h3,.reading-passage>div{hyphens:auto}
+.option span{min-width:0;white-space:pre-wrap;line-height:1.55}
+.admin-table-wrap{max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-gutter:stable}
+.admin-table{min-width:680px}
+button,.option,input,select,textarea,summary{touch-action:manipulation}
+button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-button{min-height:44px}
+
+@media(max-width:900px){
+  .dashboard-wrap,.practice-wrap,.practice-wrap:has(.reading-paper){width:min(100% - 28px,760px);padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+  .reading-pair{gap:18px}
+  .reading-pair .reading-passage{max-height:none;overflow:visible}
+  .admin-heading-actions{flex-wrap:wrap;justify-content:flex-start}
+}
+
+@media(max-width:600px){
+  .dashboard-wrap,.practice-wrap,.practice-wrap:has(.reading-paper){width:calc(100% - 20px);padding-top:26px;padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+  .topbar{position:relative;z-index:5;gap:10px}
+  .brand{min-width:0}.brand>div:last-child{min-width:0}.brand strong,.brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .account{flex:0 0 auto}.account button{padding:9px 11px}
+  .practice-heading{margin:20px 0}.practice-heading h1{font-size:clamp(27px,8vw,34px);overflow-wrap:anywhere}
+  .question-card{padding:18px 15px;border-radius:17px}
+  .question-card h2{font-size:clamp(19px,5.4vw,23px);line-height:1.55;margin:19px 0}
+  .question-meta{gap:10px;flex-wrap:wrap}
+  .option{grid-template-columns:20px 32px minmax(0,1fr);padding:12px 10px;align-items:start}
+  .option input{margin-top:7px}.option strong{width:30px;height:30px}
+  .reading-instructions{padding:15px 14px}
+  .reading-pairs{gap:22px}.reading-pair{gap:14px}
+  .reading-passage,.reading-question{padding:16px 14px;border-radius:16px}
+  .reading-passage>div{font-size:16px;line-height:1.85}
+  .reading-question h3{font-size:18px;line-height:1.55}
+  .reading-submit-bar{position:static;padding:14px;margin-top:2px;border-radius:14px}
+  .reading-submit-bar .submit-answer{min-width:0}
+  .submit-answer,.next-question{padding:14px 12px}
+  .admin-heading-actions{width:100%;display:grid;grid-template-columns:1fr}
+  .admin-heading-actions>button{width:100%;justify-content:center}
+  .admin-panel{overflow:hidden}
+  .admin-table-wrap{margin-right:-17px;padding-right:17px}
+  .quality-editor-modal{min-height:100dvh;max-height:100dvh;padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+  .quality-editor-actions{bottom:calc(-19px + env(safe-area-inset-bottom));padding-bottom:calc(13px + env(safe-area-inset-bottom))}
+}
