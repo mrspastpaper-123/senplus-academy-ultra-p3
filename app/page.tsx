@@ -12,7 +12,7 @@ const subjects = [
   { name: "科學", note: "探索、觀察與實驗", icon: Microscope, colour: "green" },
 ];
 
-const enabledMathsUnits = new Set(["4N1", "4N2", "4N3", "4N4", "4N5","4N6", "4A1", "4A2", "4M1", "4M2", "4S1", "4S2", "4D1"]);
+const enabledMathsUnits = new Set(["4N1", "4N2", "4N3", "4N4", "4N5","4N6","4A1", "4A2", "4M1", "4M2", "4S1", "4S2", "4D1"]);
 
 type Profile = { display_name: string | null; role: string; grade: string; login_allowed: boolean };
 type MathsUnit = { id: number; domain_id: number; code: string; title_zh: string; title_en: string | null; difficulty: number; curriculum_domains: { title_zh: string; code: string } | null };
