@@ -18,3 +18,4 @@ This repository stores the source code for deploying the app to a normal public 
 ## Recommended Deployment
 
 Use Cloudflare Pages or Vercel connected to this GitHub repository.
+P4 Vercel deployment
