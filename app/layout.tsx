@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SENPlus+ Academy Ultra P4",
-  description: "香港小五個人化學習與練習平台",
+  title: "SENPlus+ Academy Ultra P3",
+  description: "香港小三個人化學習與練習平台",
   other: { "codex-preview": "development" },
   icons: {
     icon: "/favicon.svg",

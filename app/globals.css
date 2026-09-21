@@ -131,11 +131,19 @@ button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-
   .quality-editor-actions{bottom:calc(-19px + env(safe-area-inset-bottom));padding-bottom:calc(13px + env(safe-area-inset-bottom))}
 }
 
-/* P4 theme: sky blue, navy and warm yellow */
-:root{--ink:#17324d;--muted:#5f7182;--cream:#f5f8fb;--teal:#287e9b;--line:#d7e3eb}
-.login-intro{background:linear-gradient(145deg,#dceff8 0%,#f5f8fb 60%,#fff0c9 100%)}
-.dashboard-page{background:#f4f8fb}
-.brand-mark{background:linear-gradient(145deg,#23577a,#2f91ad)}
-.practice-progress span,.performance-track span{background:linear-gradient(90deg,#2f91ad,#f0b83f)}
-.reading-paper-intro{background:linear-gradient(120deg,#173f63,#2d89a6)}
-.subject-card,.unit-card,.question-card{box-shadow:0 10px 35px rgba(35,87,122,.07)}
+/* P3 theme: energetic orange, sunshine yellow and warm cream */
+:root{--ink:#4b2d13;--muted:#7b6654;--cream:#fffaf0;--teal:#d96c1d;--line:#f0d7b5}
+.login-intro{background:linear-gradient(145deg,#ffe1bd 0%,#fffaf0 58%,#fff1a8 100%)}
+.dashboard-page{background:#fffaf2}
+.brand-mark{background:linear-gradient(145deg,#df5f19,#f2a126);box-shadow:0 12px 30px rgba(217,108,29,.24)}
+.account button,.auth-tabs,.role-choice label.selected{background:#fff3dc}
+.practice-progress span,.performance-track span{background:linear-gradient(90deg,#e46e1c,#f4ba32)}
+.reading-paper-intro{background:linear-gradient(120deg,#a94713,#df7b21)}
+.subject-card,.unit-card,.question-card{box-shadow:0 10px 35px rgba(151,83,27,.08)}
+.subject-button:hover,.unit-card:hover,.unit-card.enabled{border-color:#efa23b;box-shadow:0 14px 34px rgba(220,112,28,.14)}
+.unit-code{color:#9f4b11;background:#fff0d1}
+.option strong{color:#a74f12;background:#fff0d8}
+.option.selected{border-color:#e18a32;background:#fffaf1}
+.subject-grid{grid-template-columns:repeat(4,1fr)}
+@media(max-width:1000px){.subject-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.subject-grid{grid-template-columns:1fr}}
