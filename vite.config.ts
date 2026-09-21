@@ -5,7 +5,7 @@ import { sites } from "./build/sites-vite-plugin";
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
-// P4 is deployed as a separate Vercel project and does not reuse the P5 Sites id.
+// P3 is deployed as a separate Vercel project and does not reuse the P4/P5 Sites ids.
 const d1 = null;
 const r2 = null;
 

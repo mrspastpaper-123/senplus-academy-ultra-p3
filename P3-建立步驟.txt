@@ -1,0 +1,19 @@
+SENPlus+ Academy Ultra P3 第一階段建立步驟
+
+1. 在 Supabase SQL Editor 開啟 New query。
+2. 建立 P3 中文、英文、數學及常識科的課程架構。
+3. 使用 GitHub repository：senplus-academy-ultra-p3。
+4. 把本 ZIP 解壓後的檔案上載到新 repository。
+   如 GitHub 提示超過100個檔案，可分批上載；不要把 ZIP 本身放入 repository。
+5. 在 Vercel 匯入 senplus-academy-ultra-p3，建立獨立 P3 網址。
+6. 開啟新網址，確認登入及四科卡片正常。
+
+本階段已完成：
+- P3 獨立網站名稱及橙色／黃色主題
+- P3 學生註冊與跨年級登入保護
+- P3 中文、英文、數學及常識科介面
+- 管理員只顯示 P3 學生與 P3 學習紀錄
+- P3 專用題庫品質統計
+- 保留家長連結、忘記密碼、錯題分析及手機／平板改善
+
+下一階段：建立 P3 課程節點，然後逐單元匯入題庫。
