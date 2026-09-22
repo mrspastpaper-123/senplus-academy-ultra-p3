@@ -197,7 +197,7 @@ export default function Home() {
   const [studentParentRequests, setStudentParentRequests] = useState<ParentRequest[]>([]);
   const [familyLinkMessage, setFamilyLinkMessage] = useState("");
   const currentQuestion = questions[currentIndex] || null;
-  const isReadingUnit = activeUnit ? /^(4CR|4ER)/.test(activeUnit.code) : false;
+  const isReadingUnit = activeUnit ? /^(3CR|4CR|4ER)/.test(activeUnit.code) : false;
   const isWritingUnit = activeUnit?.code.startsWith("4CW") || false;
   const writingCharCount = writingContent.replace(/\\s/g, "").length;
   const displayedOptions = useMemo(() => {
@@ -845,9 +845,9 @@ export default function Home() {
     if (subject === "chinese" && unit.code.startsWith("4CW")) { await startWritingTask(unit); return; }
     setActiveSubject(subject);
     setActiveUnit(unit); setView("practice"); setPracticeLoading(true); setPracticeMessage(""); setQuestions([]); setCurrentIndex(0); setSelectedAnswer(""); setReadingAnswers({}); setReadingSubmitted([]); setFeedback(null); setCompletedResult(null);
-    const readingMode = /^(4CR|4ER)/.test(unit.code);
+    const readingMode = /^(3CR|4CR|4ER)/.test(unit.code);
     const { data: startResult, error: startError } = readingMode
-      ? await supabase.rpc("start_reading_practice", { p_node_id: unit.id })
+      ? await supabase.rpc(unit.code.startsWith("3CR") ? "start_p3_reading_practice" : "start_reading_practice", { p_node_id: unit.id })
       : await supabase.rpc("start_practice", { p_node_id: unit.id, p_question_count: 10 });
     if (startError || !startResult?.success) {
       const reason = startResult?.reason;
@@ -1126,11 +1126,11 @@ export default function Home() {
     const displayQuestionText = (question: WrongQuestion | undefined) => {
       const text = question?.question_text || "題目內容暫時未能顯示";
       const code = nodeMap.get(question?.node_id || 0)?.code || "";
-      return /^(4CR|4ER)/.test(code) ? splitReadingQuestion(text).prompt : text;
+      return /^(3CR|4CR|4ER)/.test(code) ? splitReadingQuestion(text).prompt : text;
     };
     const readingSources = Array.from(grouped.reduce((map, row) => {
       const node = nodeMap.get(row.question?.node_id || 0);
-      if (!node || !/^(4CR|4ER)/.test(node.code) || !row.question?.question_text) return map;
+      if (!node || !/^(3CR|4CR|4ER)/.test(node.code) || !row.question?.question_text) return map;
       const { passage } = splitReadingQuestion(row.question.question_text);
       if (passage !== "閱讀理解") map.set(`${node.code}:${passage}`, { code: node.code, title: node.title_zh, passage });
       return map;
