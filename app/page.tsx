@@ -13,7 +13,7 @@ const subjects = [
 
 const enabledMathsUnits = new Set(["3N1", "3N2", "3N3", "3N4", "3N5", "3M1", "3M2", "3M3", "3M4", "3M5", "3S1", "3S2", "3D1"]);
 
-type Profile = { display_name: string | null; role: string; grade: string; login_allowed: boolean };
+type Profile = { display_name: string | null; role: string; grade: string | null; login_allowed: boolean; approved_at?: string | null };
 type MathsUnit = { id: number; domain_id: number; code: string; title_zh: string; title_en: string | null; difficulty: number; curriculum_domains: { title_zh: string; code: string } | null };
 type PracticeQuestion = { id: number; question_text: string; options: { id: string; text: string }[] };
 type WritingPrompt = { prompt_id: number; genre: string; title: string; instruction: string; min_chars: number; max_chars: number; guidance: string[] };
@@ -22,7 +22,7 @@ type AnswerFeedback = { is_correct: boolean; correct_answer: string; explanation
 type AdminAttempt = { id: number; student_id: string; node_id: number; status: string; total_questions: number; answered_count: number; correct_count: number; score: number | null; started_at: string; completed_at: string | null };
 type AdminUser = { id: string; display_name: string | null; grade: string | null; role: string };
 type AdminNode = { id: number; code: string; title_zh: string };
-type ManagedStudent = { user_id: string; display_name: string | null; email: string; grade: string | null; login_allowed: boolean; created_at: string; device_count: number; attempt_count: number; completed_count: number; average_score: number | null };
+type ManagedStudent = { user_id: string; display_name: string | null; email: string; role: "student" | "parent"; grade: string | null; login_allowed: boolean; approved_at?: string | null; pending_status: "pending" | "approved" | "suspended"; max_devices?: number; created_at: string; device_count: number; attempt_count: number; completed_count: number; average_score: number | null };
 type WrongResponse = { id: number; attempt_id: number; question_id: number; selected_answer: unknown; answered_at: string };
 type WrongQuestion = { id: number; node_id: number; question_text: string; options: { id: string; text: string }[] };
 type WrongAnswerKey = { question_id: number; correct_answer: unknown; explanation: string | null; hint: string | null };
@@ -259,6 +259,20 @@ export default function Home() {
   useEffect(() => {
     if (!session?.user || passwordRecoveryMode) return;
     async function verifyAccess() {
+      const { data, error } = await supabase.from("profiles").select("display_name, role, grade, login_allowed, approved_at").eq("id", session!.user.id).single();
+      if (error) {
+        setMessage("未能讀取用戶資料，請聯絡管理員。");
+        return;
+      }
+      if (data.role === "student" && data.grade !== "P3") {
+        await supabase.auth.signOut();
+        setMessage("這是P3學習平台，請使用P3學生帳戶登入。");
+        return;
+      }
+      if (!data.login_allowed) {
+        setProfile(data);
+        return;
+      }
       let deviceKey = window.localStorage.getItem("senplus_device_key");
       if (!deviceKey) {
         deviceKey = crypto.randomUUID();
@@ -274,15 +288,7 @@ export default function Home() {
         setMessage(deviceError.message.includes("maximum") || deviceError.message.includes("limit") ? "此帳戶已達登入裝置上限，請聯絡管理員。" : "此帳戶目前不能登入，請聯絡管理員。");
         return;
       }
-      const { data, error } = await supabase.from("profiles").select("display_name, role, grade, login_allowed").eq("id", session!.user.id).single();
-      if (error) {
-        setMessage("未能讀取用戶資料，請聯絡管理員。");
-      } else if (data.role === "student" && data.grade !== "P3") {
-        await supabase.auth.signOut();
-        setMessage("這是P3學習平台，請使用P3學生帳戶登入。");
-      } else {
-        setProfile(data);
-      }
+      setProfile(data);
     }
     verifyAccess();
   }, [session, supabase, passwordRecoveryMode]);
@@ -471,10 +477,10 @@ export default function Home() {
       }
     } else if (data.session) {
       setRegistrationSuccess(true);
-      setRegistrationMessage("帳戶已建立，正在進入學習平台。");
+      setRegistrationMessage("帳戶已建立，現正等待管理員批准。批准後便可登入學習平台。");
     } else {
       setRegistrationSuccess(true);
-      setRegistrationMessage("帳戶已建立。請到電郵信箱按確認連結，然後返回登入。");
+      setRegistrationMessage("帳戶已建立。請先到電郵信箱按確認連結；完成後仍需等待管理員批准。");
     }
     setRegistrationLoading(false);
   }
@@ -532,8 +538,29 @@ export default function Home() {
   async function openStudentManagement() {
     if (profile?.role !== "admin") return;
     setView("students"); setStudentsLoading(true); setStudentsMessage("");
-    const { data, error } = await supabase.rpc("admin_get_students");
-    if (error) setStudentsMessage("未能載入學生帳戶，請稍後再試。"); else setManagedStudents(((data || []) as ManagedStudent[]).filter((student) => student.grade === "P3"));
+    const [accountResult, studentResult] = await Promise.all([
+      supabase.rpc("admin_get_signup_users"),
+      supabase.rpc("admin_get_students"),
+    ]);
+    if (accountResult.error) {
+      setStudentsMessage("未能載入待審批帳戶，請確認已執行最新帳戶審批SQL。");
+    } else {
+      const studentStats = new Map(((studentResult.data || []) as ManagedStudent[]).map((student) => [student.user_id, student]));
+      const accounts = ((accountResult.data || []) as ManagedStudent[])
+        .filter((account) => account.role === "parent" || account.grade === "P3")
+        .map((account) => {
+          const stats = studentStats.get(account.user_id);
+          return {
+            ...account,
+            device_count: Number(stats?.device_count || 0),
+            attempt_count: Number(stats?.attempt_count || 0),
+            completed_count: Number(stats?.completed_count || 0),
+            average_score: stats?.average_score ?? null,
+          };
+        });
+      setManagedStudents(accounts);
+      if (studentResult.error) setStudentsMessage("帳戶審批名單已載入；學生裝置及成績統計暫時未能顯示。");
+    }
     setStudentsLoading(false);
   }
 
@@ -668,11 +695,19 @@ export default function Home() {
     setErrorsLoading(false);
   }
 
-  async function setStudentAccess(student: ManagedStudent) {
-    setStudentActionId(student.user_id); setStudentsMessage("");
-    const { data, error } = await supabase.rpc("admin_set_student_access", { p_user_id: student.user_id, p_login_allowed: !student.login_allowed });
-    if (error || !data?.success) setStudentsMessage("未能更新登入權限，請稍後再試。");
-    else setManagedStudents((items) => items.map((item) => item.user_id === student.user_id ? { ...item, login_allowed: !student.login_allowed } : item));
+  async function setStudentAccess(account: ManagedStudent, allowAccess: boolean) {
+    setStudentActionId(account.user_id); setStudentsMessage("");
+    const { data, error } = await supabase.rpc("admin_set_signup_user_access", { p_user_id: account.user_id, p_login_allowed: allowAccess });
+    if (error || data !== true) {
+      setStudentsMessage("未能更新帳戶審批狀態，請稍後再試。");
+    } else {
+      setManagedStudents((items) => items.map((item) => item.user_id === account.user_id ? {
+        ...item,
+        login_allowed: allowAccess,
+        approved_at: allowAccess ? (item.approved_at || new Date().toISOString()) : item.approved_at,
+        pending_status: allowAccess ? "approved" : "suspended",
+      } : item));
+    }
     setStudentActionId(null);
   }
 
@@ -1047,7 +1082,7 @@ export default function Home() {
     </main>
   );
 
-  if (profile && !profile.login_allowed) return <main className="status-page"><div className="status-card"><h1>帳戶暫停使用</h1><p>請聯絡 SENPlus+ 管理員重新啟用登入權限。</p><button onClick={signOut}>登出</button></div></main>;
+  if (profile && !profile.login_allowed) return <main className="status-page"><div className="status-card">{profile.approved_at ? <><h1>帳戶暫停使用</h1><p>此帳戶已由管理員暫停。請聯絡 SENPlus+ 管理員重新啟用登入權限。</p></> : <><h1>帳戶等待批准</h1><p>你的帳戶已成功建立，現正等待 SENPlus+ 管理員批准。批准後便可登入平台。</p></>}<button onClick={signOut}>登出</button></div></main>;
 
   if (view === "parent" && profile?.role === "parent") {
     const selectedChild = parentChildren.find((child) => child.student_id === selectedParentChildId) || parentChildren[0];
@@ -1244,10 +1279,10 @@ export default function Home() {
     const query = studentSearch.trim().toLowerCase();
     const filteredStudents = managedStudents.filter((student) => !query || (student.display_name || "").toLowerCase().includes(query) || student.email.toLowerCase().includes(query));
     return <main className="dashboard-page">
-      <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>學生帳戶管理</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+      <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>帳戶審批管理</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
       <section className="dashboard-wrap admin-wrap">
         <button className="back-button" onClick={() => setView("admin")}><ArrowLeft size={18} />返回成績儀表板</button>
-        <div className="admin-heading student-heading"><div><p className="eyebrow">帳戶與裝置</p><h1>學生帳戶管理</h1><p>建立學生帳戶、控制登入權限，並在更換裝置時清除原有裝置紀錄。</p></div><div className="admin-heading-actions"><button className="create-student-button" onClick={() => { setShowCreateStudent((value) => !value); setCreateStudentMessage(""); setCreateStudentSuccess(false); }}>{showCreateStudent ? <X size={17} /> : <Plus size={17} />}{showCreateStudent ? "關閉表格" : "新增學生"}</button><button onClick={openStudentManagement} disabled={studentsLoading}>{studentsLoading ? "更新中…" : "更新學生資料"}</button></div></div>
+        <div className="admin-heading student-heading"><div><p className="eyebrow">帳戶與審批</p><h1>學生及家長帳戶管理</h1><p>查看自行註冊的學生及家長、批准或暫停登入，並管理學生裝置。</p></div><div className="admin-heading-actions"><button className="create-student-button" onClick={() => { setShowCreateStudent((value) => !value); setCreateStudentMessage(""); setCreateStudentSuccess(false); }}>{showCreateStudent ? <X size={17} /> : <Plus size={17} />}{showCreateStudent ? "關閉表格" : "新增學生"}</button><button onClick={openStudentManagement} disabled={studentsLoading}>{studentsLoading ? "更新中…" : "更新帳戶資料"}</button></div></div>
         {showCreateStudent && <section className="create-student-panel">
           <div className="create-student-title"><div className="create-student-icon"><UserPlus size={24} /></div><div><p className="eyebrow">建立登入帳戶</p><h2>新增一位P3學生</h2><p>學生可立即使用電郵及臨時密碼登入，最多登記兩部裝置。</p></div></div>
           <form className="create-student-form" onSubmit={createStudent}>
@@ -1261,11 +1296,15 @@ export default function Home() {
           {createStudentMessage && <p className={`create-student-result ${createStudentSuccess ? "success" : "error"}`}>{createStudentMessage}</p>}
           <p className="password-reminder">請以安全方式把臨時密碼交給學生，不要在公開群組傳送。</p>
         </section>}
-        <div className="student-tools"><div className="student-search"><Search size={18} /><input aria-label="搜尋學生" placeholder="搜尋學生姓名或電郵" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} /></div><div className="student-count"><Users size={18} /><strong>{managedStudents.length}</strong><span>個學生帳戶</span></div></div>
+        <div className="student-tools"><div className="student-search"><Search size={18} /><input aria-label="搜尋帳戶" placeholder="搜尋學生或家長姓名／電郵" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} /></div><div className="student-count"><Users size={18} /><strong>{managedStudents.length}</strong><span>個學生／家長帳戶</span></div></div>
         {studentsMessage && <div className="unit-status error-message">{studentsMessage}</div>}
         {passwordResetStudent && <section className="password-reset-panel"><div className="password-reset-heading"><div className="password-reset-icon"><KeyRound size={23} /></div><div><p className="eyebrow">管理員安全操作</p><h2>重設 {passwordResetStudent.display_name || passwordResetStudent.email} 的密碼</h2><p>設定一次性臨時密碼；原有密碼會立即失效，學生下次登入時必須建立自己的新密碼。</p></div><button type="button" aria-label="關閉重設密碼表格" onClick={() => { setPasswordResetStudent(null); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); }}><X size={19} /></button></div><form onSubmit={resetStudentPassword}><label><span>新臨時密碼</span><input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} placeholder="最少8個字元" /></label><label><span>確認臨時密碼</span><input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={confirmTemporaryPassword} onChange={(event) => setConfirmTemporaryPassword(event.target.value)} placeholder="再次輸入臨時密碼" /></label><button type="submit" disabled={studentActionId === passwordResetStudent.user_id}><KeyRound size={17} />{studentActionId === passwordResetStudent.user_id ? "重設中…" : "確認重設密碼"}</button></form>{passwordResetMessage && <p className={`create-student-result ${passwordResetSuccess ? "success" : "error"}`}>{passwordResetMessage}</p>}<p className="password-reminder">請以安全方式把臨時密碼交給學生，不要在公開群組傳送。</p></section>}
-        {studentsLoading && !managedStudents.length ? <div className="unit-status">正在載入學生帳戶…</div> : <section className="admin-panel student-panel"><div className="admin-table-wrap"><table className="admin-table student-table"><thead><tr><th>學生</th><th>年級</th><th>登入狀態</th><th>裝置</th><th>練習</th><th>平均分</th><th>帳戶操作</th></tr></thead><tbody>{filteredStudents.map((student) => <tr key={student.user_id}><td><button className="student-name-link" onClick={() => openStudentDetail(student.user_id, "students")}><strong>{student.display_name || "未命名學生"}</strong><small>{student.email}</small></button></td><td>{student.grade || "P3"}</td><td><span className={`access-pill ${student.login_allowed ? "allowed" : "blocked"}`}>{student.login_allowed ? "允許登入" : "已停用"}</span></td><td><span className="device-value"><Smartphone size={15} />{student.device_count}／2</span></td><td>{student.completed_count}／{student.attempt_count}</td><td><strong>{student.average_score === null ? "—" : `${Math.round(Number(student.average_score))}分`}</strong></td><td><div className="student-actions"><button className="detail-action" onClick={() => openStudentDetail(student.user_id, "students")}><BarChart3 size={13} />查看成績</button><button className={student.login_allowed ? "disable-action" : "enable-action"} disabled={studentActionId === student.user_id} onClick={() => setStudentAccess(student)}>{student.login_allowed ? "停用登入" : "重新啟用"}</button><button className="reset-action" disabled={studentActionId === student.user_id || Number(student.device_count) === 0} onClick={() => resetStudentDevices(student)}>重設裝置</button><button className="password-action" disabled={studentActionId === student.user_id} onClick={() => { setPasswordResetStudent(student); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); setPasswordResetSuccess(false); window.scrollTo({ top: 260, behavior: "smooth" }); }}><KeyRound size={13} />重設密碼</button></div></td></tr>)}</tbody></table></div>{!filteredStudents.length && <p className="empty-admin">{managedStudents.length ? "找不到符合搜尋條件的學生。" : "目前尚未建立學生帳戶。"}</p>}</section>}
-        <aside className="management-note"><UserCog size={21} /><div><strong>安全管理</strong><p>停用登入後，學生即使仍有舊登入狀態也不能讀取課程或開始練習。重設裝置不會刪除學生的成績。</p></div></aside>
+        {studentsLoading && !managedStudents.length ? <div className="unit-status">正在載入學生帳戶…</div> : <section className="admin-panel student-panel"><div className="admin-table-wrap"><table className="admin-table student-table"><thead><tr><th>帳戶</th><th>身份／年級</th><th>審批狀態</th><th>裝置</th><th>練習</th><th>平均分</th><th>帳戶操作</th></tr></thead><tbody>{filteredStudents.map((student) => {
+              const accountStatus = student.pending_status || (student.login_allowed ? "approved" : student.approved_at ? "suspended" : "pending");
+              const statusLabel = accountStatus === "approved" ? "已批准" : accountStatus === "suspended" ? "已暫停" : "等待批准";
+              return <tr key={student.user_id}><td><button className="student-name-link" onClick={() => student.role === "student" && openStudentDetail(student.user_id, "students")}><strong>{student.display_name || (student.role === "parent" ? "未命名家長" : "未命名學生")}</strong><small>{student.email}</small></button></td><td><strong>{student.role === "parent" ? "家長" : "學生"}</strong><small>{student.grade || "未連結年級"}</small></td><td><span className={`access-pill ${accountStatus === "approved" ? "allowed" : "blocked"}`}>{statusLabel}</span></td><td>{student.role === "student" ? <span className="device-value"><Smartphone size={15} />{student.device_count}／{student.max_devices || 2}</span> : "—"}</td><td>{student.role === "student" ? `${student.completed_count}／${student.attempt_count}` : "—"}</td><td><strong>{student.role === "student" && student.average_score !== null ? `${Math.round(Number(student.average_score))}分` : "—"}</strong></td><td><div className="student-actions">{accountStatus !== "approved" ? <button className="enable-action" disabled={studentActionId === student.user_id} onClick={() => setStudentAccess(student, true)}>{accountStatus === "pending" ? "批准帳戶" : "重新啟用"}</button> : <button className="disable-action" disabled={studentActionId === student.user_id} onClick={() => setStudentAccess(student, false)}>暫停登入</button>}{student.role === "student" && <><button className="detail-action" onClick={() => openStudentDetail(student.user_id, "students")}><BarChart3 size={13} />查看成績</button><button className="reset-action" disabled={studentActionId === student.user_id || Number(student.device_count) === 0} onClick={() => resetStudentDevices(student)}>重設裝置</button><button className="password-action" disabled={studentActionId === student.user_id} onClick={() => { setPasswordResetStudent(student); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); setPasswordResetSuccess(false); window.scrollTo({ top: 260, behavior: "smooth" }); }}><KeyRound size={13} />重設密碼</button></>}</div></td></tr>;
+            })}</tbody></table></div>{!filteredStudents.length && <p className="empty-admin">{managedStudents.length ? "找不到符合搜尋條件的帳戶。" : "目前尚未有學生或家長帳戶。"}</p>}</section>}
+        <aside className="management-note"><UserCog size={21} /><div><strong>安全管理</strong><p>新註冊帳戶須經批准才可存取；暫停登入不會刪除學生的成績或家長連結資料。</p></div></aside>
       </section>
     </main>;
   }
