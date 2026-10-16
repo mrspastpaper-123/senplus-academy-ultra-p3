@@ -73,7 +73,7 @@ function localiseQuestion<T extends PracticeQuestion>(question: T): T {
 }
 
 function stripQuestionMetadata(value: string) {
-  return value.replace(/^\s*【[^】]*[｜|][^】]*】\s*/u, "").trimStart();
+  return value.replace(/^\s*【[^】]+】\s*/u, "").trimStart();
 }
 
 function renderMarkedText(value: string) {
