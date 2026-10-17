@@ -36,6 +36,19 @@ type ParentError = { response_id: number; question_id: number; selected_answer: 
 type QualityIssue = { issue_type: string; severity: "error" | "warning"; question_id: number; node_code: string | null; question_text: string; details: string; options: { id: string; text: string }[] | null; correct_answer: string | null; explanation: string | null; hint: string | null };
 type QualitySummary = { total_questions: number; total_issues: number; affected_questions: number; error_count: number; warning_count: number };
 type QualityEditor = { questionId: number; questionText: string; optionA: string; optionB: string; optionC: string; optionD: string; correctAnswer: string; explanation: string; hint: string };
+type StudentHomeStats = {
+  completed: number;
+  answered: number;
+  correct: number;
+  average: number;
+  starCount: number;
+  streak: number;
+  todayCompleted: number;
+  lastSubject: string | null;
+  lastUnitCode: string | null;
+  lastUnitTitle: string | null;
+  subjectCompleted: Record<string, number>;
+};
 type AppView = "subjects" | "parent" | "chinese" | "english" | "maths" | "generalStudies" | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
 type AuthMode = "login" | "register";
 type RegistrationRole = "student" | "parent";
@@ -119,17 +132,13 @@ function TwinkoGuide({ view, answerCorrect }: { view: string; answerCorrect: boo
               : "歡迎回來！一起出發吧！";
 
   return (
-    <>
-      <aside className={`twinko-guide twinko-guide--${mood}`} aria-label="Twinko 學習小導師">
-        <span className="twinko-guide__orbit" aria-hidden="true" />
-        <span className="twinko-guide__sparkle twinko-guide__sparkle--one" aria-hidden="true">✦</span>
-        <span className="twinko-guide__sparkle twinko-guide__sparkle--two" aria-hidden="true">✧</span>
-        <span className="twinko-guide__bubble" aria-live="polite">{message}</span>
-        <img className="twinko-guide__image" src={imageSrc} alt="Twinko 學習小導師" width={720} height={622} />
-      </aside>
-      <img className={`twinko-companion twinko-companion--peek twinko-companion--${mood}`} src="/twinko-wave.png" alt="" width={720} height={622} aria-hidden="true" />
-      <img className={`twinko-companion twinko-companion--study twinko-companion--${mood}`} src="/twinko-reading.png" alt="" width={720} height={622} aria-hidden="true" />
-    </>
+    <aside className={`twinko-guide twinko-guide--${mood}`} aria-label="Twinko 學習小導師">
+      <span className="twinko-guide__orbit" aria-hidden="true" />
+      <span className="twinko-guide__sparkle twinko-guide__sparkle--one" aria-hidden="true">✦</span>
+      <span className="twinko-guide__sparkle twinko-guide__sparkle--two" aria-hidden="true">✧</span>
+      <span className="twinko-guide__bubble" aria-live="polite">{message}</span>
+      <img className="twinko-guide__image" src={imageSrc} alt="Twinko 學習小導師" width={720} height={622} />
+    </aside>
   );
 }
 
@@ -249,6 +258,19 @@ export default function Home() {
   const [studentLinkExpiry, setStudentLinkExpiry] = useState<string | null>(null);
   const [studentParentRequests, setStudentParentRequests] = useState<ParentRequest[]>([]);
   const [familyLinkMessage, setFamilyLinkMessage] = useState("");
+  const [studentHomeStats, setStudentHomeStats] = useState<StudentHomeStats>({
+    completed: 0,
+    answered: 0,
+    correct: 0,
+    average: 0,
+    starCount: 0,
+    streak: 0,
+    todayCompleted: 0,
+    lastSubject: null,
+    lastUnitCode: null,
+    lastUnitTitle: null,
+    subjectCompleted: {},
+  });
   const currentQuestion = questions[currentIndex] || null;
   const isReadingUnit = activeUnit ? /^(3CR|3ER)/.test(activeUnit.code) : false;
   const isWritingUnit = activeUnit?.code.startsWith("4CW") || false;
@@ -353,8 +375,9 @@ export default function Home() {
       loadParentDashboard();
     } else if (profile?.role === "student") {
       loadStudentParentRequests();
+      loadStudentHomeStats();
     }
-  }, [profile]);
+  }, [profile, view === "subjects"]);
 
   async function loadParentDashboard() {
     setParentLoading(true); setParentMessage("");
@@ -399,6 +422,78 @@ export default function Home() {
     if (error || !data?.success) setParentMessage("未能載入錯題，請稍後再試。");
     else setParentErrors((data.errors || []) as ParentError[]);
     setParentErrorsLoading(false);
+  }
+
+  async function loadStudentHomeStats() {
+    if (!session?.user) return;
+    const { data: attempts, error } = await supabase
+      .from("practice_attempts")
+      .select("id, node_id, status, total_questions, answered_count, correct_count, score, started_at, completed_at")
+      .eq("student_id", session.user.id)
+      .order("started_at", { ascending: false })
+      .limit(200);
+    if (error) return;
+
+    const rows = (attempts || []) as AdminAttempt[];
+    const nodeIds = [...new Set(rows.map((attempt) => attempt.node_id))];
+    const { data: nodeRows } = nodeIds.length
+      ? await supabase.from("curriculum_nodes").select("id, code, title_zh").in("id", nodeIds)
+      : { data: [] as AdminNode[] };
+    const nodeMap = new Map(((nodeRows || []) as AdminNode[]).map((node) => [node.id, node]));
+    const completedRows = rows.filter((attempt) => attempt.status === "completed" || attempt.completed_at);
+    const answered = rows.reduce((total, attempt) => total + (attempt.answered_count || 0), 0);
+    const correct = rows.reduce((total, attempt) => total + (attempt.correct_count || 0), 0);
+    const scoredRows = completedRows.filter((attempt) => attempt.score !== null);
+    const average = scoredRows.length
+      ? Math.round(scoredRows.reduce((total, attempt) => total + (attempt.score || 0), 0) / scoredRows.length)
+      : 0;
+
+    const localDateKey = (value: string) => {
+      const date = new Date(value);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    };
+    const completedDates = new Set(completedRows.map((attempt) => localDateKey(attempt.completed_at || attempt.started_at)));
+    const today = new Date();
+    const todayKey = localDateKey(today.toISOString());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    let cursor = completedDates.has(todayKey) ? today : yesterday;
+    let streak = 0;
+    while (completedDates.has(localDateKey(cursor.toISOString()))) {
+      streak += 1;
+      cursor = new Date(cursor);
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    const subjectCompleted: Record<string, number> = {};
+    const subjectForCode = (code: string) => {
+      if (/^3(?:CL|CR|CW)/i.test(code)) return "中文";
+      if (/^3E/i.test(code)) return "英文";
+      if (/^3(?:N|M|S|D|A)/i.test(code)) return "數學";
+      return "常識科";
+    };
+    completedRows.forEach((attempt) => {
+      const node = nodeMap.get(attempt.node_id);
+      if (!node) return;
+      const subjectName = subjectForCode(node.code);
+      subjectCompleted[subjectName] = (subjectCompleted[subjectName] || 0) + 1;
+    });
+
+    const lastAttempt = rows[0];
+    const lastNode = lastAttempt ? nodeMap.get(lastAttempt.node_id) : null;
+    setStudentHomeStats({
+      completed: completedRows.length,
+      answered,
+      correct,
+      average,
+      starCount: correct + completedRows.length * 30,
+      streak,
+      todayCompleted: completedRows.filter((attempt) => localDateKey(attempt.completed_at || attempt.started_at) === todayKey).length,
+      lastSubject: lastNode ? subjectForCode(lastNode.code) : null,
+      lastUnitCode: lastNode?.code || null,
+      lastUnitTitle: lastNode?.title_zh || null,
+      subjectCompleted,
+    });
   }
 
   async function createStudentParentCode() {
@@ -1071,12 +1166,16 @@ export default function Home() {
   );
 
   if (!session) return (
-    <main className="login-page"><TwinkoGuide view="welcome" answerCorrect={feedback?.is_correct ?? null} />
+    <main className="login-page login-page-v2">
       <section className="login-intro">
         <div className="brand-mark">S+</div><p className="eyebrow">SENPlus+ Academy Ultra</p>
         <h1>每一步，都是<br />成長的亮光。</h1>
         <p className="intro-copy">為香港小三學生而設的個人化學習空間，以清晰步驟建立信心，讓練習變得自在而有方向。</p>
         <div className="subject-dots" aria-label="五個科目">{subjects.map((subject) => <span key={subject.name}>{subject.name}</span>)}</div>
+        <div className="login-twinko-scene" aria-label="Twinko 歡迎你">
+          <img src="/twinko-wave.png" alt="Twinko 揮手歡迎" width={720} height={622} />
+          <div><strong>慢慢來，我陪你。</strong><span>準備好就一起開始今天的學習旅程。</span></div>
+        </div>
       </section>
       <section className="login-panel"><div className="login-card">
         <div className="mobile-brand"><div className="brand-mark">S+</div><span>SENPlus+</span></div>
@@ -1383,11 +1482,11 @@ export default function Home() {
       map.set(attempt.student_id, current); return map;
     }, new Map<string, { attempts: number; completed: number; scoreTotal: number }>()).entries()).map(([userId, stats]) => ({ user: userMap.get(userId), ...stats, average: stats.completed ? Math.round(stats.scoreTotal / stats.completed) : 0 })).sort((a, b) => b.attempts - a.attempts);
     const formatDate = (value: string) => new Intl.DateTimeFormat("zh-HK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
-    return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
+    return <main className="dashboard-page admin-dashboard-v2">
       <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>管理員學習成績儀表板</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
       <section className="dashboard-wrap admin-wrap">
         <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回學習平台</button>
-        <div className="admin-heading"><div><p className="eyebrow">學習分析</p><h1>成績總覽</h1><p>查看學生完成情況、平均成績及各數學單位表現。</p></div><div className="admin-heading-actions"><button className="student-management-button" onClick={openStudentManagement}><UserCog size={17} />學生帳戶</button><button className="student-management-button" onClick={openQuestionQualityAudit}><ShieldCheck size={17} />題庫檢查</button><button className="student-management-button" onClick={openAdminFeedback}><MessageSquareText size={17} />問題回報</button><button onClick={openAdminDashboard} disabled={adminLoading}>{adminLoading ? "更新中…" : "更新資料"}</button></div></div>
+        <div className="admin-heading"><div className="admin-heading-copy"><div><p className="eyebrow">學習分析</p><h1>成績總覽</h1><p>輕鬆掌握學生的學習進度與需要協助的地方。</p></div><div className="admin-twinko-scene" aria-hidden="true"><img src="/twinko-reading.png" alt="" width={720} height={622} /><span>今天也一起看看大家的進度吧！</span></div></div><div className="admin-heading-actions"><button className="student-management-button" onClick={openStudentManagement}><UserCog size={17} />學生帳戶</button><button className="student-management-button" onClick={openQuestionQualityAudit}><ShieldCheck size={17} />題庫檢查</button><button className="student-management-button" onClick={openAdminFeedback}><MessageSquareText size={17} />問題回報</button><button onClick={openAdminDashboard} disabled={adminLoading}>{adminLoading ? "更新中…" : "更新資料"}</button></div></div>
         {adminMessage && <div className="unit-status error-message">{adminMessage}</div>}
         {adminLoading && !adminAttempts.length ? <div className="unit-status">正在整理學習紀錄…</div> : <>
           <div className="metric-grid">
@@ -1432,7 +1531,7 @@ export default function Home() {
     </main>;
   }
 
-  if (view === "practice") return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
+  if (view === "practice") return <main className={`dashboard-page learning-flow-v2 practice-flow-v2 subject-${activeSubject}`}><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap practice-wrap">
       <button className="back-button" onClick={() => setView(activeSubject)}><ArrowLeft size={18} />返回{activeSubject === "chinese" ? "中文" : activeSubject === "english" ? "英文" : activeSubject === "generalStudies" ? "常識科" : "數學"}單位</button>
@@ -1464,7 +1563,7 @@ export default function Home() {
     </section>
   </main>;
 
-  if (view === "maths") return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
+  if (view === "maths") return <main className="dashboard-page learning-flow-v2 subject-maths"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
@@ -1477,7 +1576,7 @@ export default function Home() {
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
 
-  if (view === "english") return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
+  if (view === "english") return <main className="dashboard-page learning-flow-v2 subject-english"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap english-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
@@ -1490,7 +1589,7 @@ export default function Home() {
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
 
-  if (view === "chinese") return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
+  if (view === "chinese") return <main className="dashboard-page learning-flow-v2 subject-chinese"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap chinese-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
@@ -1503,7 +1602,7 @@ export default function Home() {
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
 
-  if (view === "generalStudies") return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
+  if (view === "generalStudies") return <main className="dashboard-page learning-flow-v2 subject-generalStudies"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap general-studies-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
@@ -1516,18 +1615,91 @@ export default function Home() {
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
 
-  return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
-    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
-    <section className="dashboard-wrap"><div className="welcome-row"><div className="welcome"><p className="eyebrow">今日學習</p><h1>你好，{profile?.display_name || "同學"}</h1><p>選擇一個科目，開始今天的小三練習。</p></div>{profile?.role === "admin" && <button className="admin-entry" onClick={openAdminDashboard}><LayoutDashboard size={20} /><span><strong>管理員儀表板</strong><small>查看學習成績與進度</small></span></button>}</div>
-      {profile?.role === "student" && <section className="student-family-panel"><div className="student-family-heading"><div className="parent-link-icon"><Link2 size={23} /></div><div><strong>家長連結</strong><p>產生一次性邀請碼，或處理家長的連結申請。</p></div><button onClick={createStudentParentCode}>{studentLinkCode ? "重新產生" : "產生邀請碼"}</button></div>{studentLinkCode && <div className="student-code-row"><div><span>一次性邀請碼</span><strong>{studentLinkCode}</strong><small>{studentLinkExpiry ? `${new Intl.DateTimeFormat("zh-HK", { hour: "2-digit", minute: "2-digit" }).format(new Date(studentLinkExpiry))} 前有效` : "30分鐘內有效"}</small></div><p>請只把邀請碼交給你的家長或監護人。家長提交後，仍須由你確認。</p></div>}{studentParentRequests.length > 0 && <div className="student-parent-requests">{studentParentRequests.map((request) => <article key={request.parent_id}><div><span className={`request-state ${request.status}`}>{request.status === "pending" ? "等待確認" : "已連結"}</span><strong>{request.display_name}</strong><small>{request.status === "pending" ? "希望查看你的學習成績及錯題" : "可以查看你的學習紀錄"}</small></div><div>{request.status === "pending" && <button className="approve-request" onClick={() => respondToParentRequest(request.parent_id, true)}>批准</button>}<button className="reject-request" onClick={() => respondToParentRequest(request.parent_id, false)}>{request.status === "pending" ? "拒絕" : "解除"}</button></div></article>)}</div>}{familyLinkMessage && <p className="family-link-message">{familyLinkMessage}</p>}</section>}
-      <div className="subject-grid">{subjects.map(({ name, note, icon: Icon, colour }) => {
+  const continueHomeLearning = () => {
+    if (studentHomeStats.lastSubject === "中文") return openChinese();
+    if (studentHomeStats.lastSubject === "英文") return openEnglish();
+    if (studentHomeStats.lastSubject === "常識科") return openGeneralStudies();
+    return openMaths();
+  };
+  const todayGoalDone = studentHomeStats.todayCompleted > 0;
+
+  return <main className="dashboard-page student-home-v2">
+    <header className="topbar student-home-header">
+      <div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra</span></div></div>
+      <nav className="student-home-nav" aria-label="學生主選單">
+        <button className="active" onClick={() => setView("subjects")}>我的學習</button>
+        <button onClick={() => document.getElementById("student-subjects")?.scrollIntoView({ behavior: "smooth" })}>全部科目</button>
+        <button onClick={() => document.getElementById("student-progress")?.scrollIntoView({ behavior: "smooth" })}>學習進度</button>
+      </nav>
+      <div className="account student-home-account">
+        <span className="student-star-bank"><b>★</b>{studentHomeStats.starCount.toLocaleString("zh-HK")}</span>
+        <span className="student-grade-pill">{profile?.grade || "P3"}</span>
+        <span>{profile?.display_name || session.user.email}</span>
+        <button onClick={signOut}><LogOut size={17} />登出</button>
+      </div>
+    </header>
+
+    <section className="student-home-shell">
+      <section className="student-home-hero">
+        <div className="student-home-hero-copy">
+          <div className="student-home-kicker"><span>下午好，{profile?.display_name || "同學"}！</span><b>今日任務 {todayGoalDone ? "1／1" : "0／1"}</b></div>
+          <h1>準備好開始今天的<br /><em>小小學習旅程</em>了嗎？</h1>
+          <p>每天完成一小步，知識星球就會亮起更多星光。</p>
+          <div className="student-home-actions">
+            <button className="student-primary-action" onClick={continueHomeLearning}><span>▶</span>{studentHomeStats.lastSubject ? "繼續上次科目" : "開始第一個練習"}</button>
+            <button className="student-secondary-action" onClick={() => document.getElementById("student-subjects")?.scrollIntoView({ behavior: "smooth" })}>查看全部科目</button>
+          </div>
+          {profile?.role === "admin" && <button className="admin-entry student-admin-entry" onClick={openAdminDashboard}><LayoutDashboard size={20} /><span><strong>管理員儀表板</strong><small>查看學習成績與進度</small></span></button>}
+        </div>
+        <div className="student-home-visual" aria-label="Twinko 學習小導師">
+          <span className="student-home-orbit orbit-one" aria-hidden="true" />
+          <span className="student-home-orbit orbit-two" aria-hidden="true" />
+          <span className="student-home-sparkle sparkle-one" aria-hidden="true">✦</span>
+          <span className="student-home-sparkle sparkle-two" aria-hidden="true">✧</span>
+          <img src="/twinko-star-guide.png" alt="Twinko 學習小導師" width={720} height={622} />
+          <div className="student-home-speech">{todayGoalDone ? "今日目標完成了，做得很好！" : "我們由最適合你的任務開始吧！"}</div>
+        </div>
+      </section>
+
+      <section className="student-home-path-card" aria-label="今日星光路徑">
+        <div className="student-path-copy"><span>今日星光路徑</span><h2>{todayGoalDone ? "星星寶箱已開啟！" : "完成練習，開啟星星寶箱"}</h2><p>每一小步都有即時回饋，不必一次完成全部。</p></div>
+        <div className="student-path">
+          <span className="student-path-line"><i style={{ width: todayGoalDone ? "100%" : "34%" }} /></span>
+          <article className="student-path-step done"><b>✓</b><span><strong>登入</strong><small>進入學習</small></span></article>
+          <article className={`student-path-step ${todayGoalDone ? "done" : "current"}`}><b>{todayGoalDone ? "✓" : "2"}</b><span><strong>練習</strong><small>完成 10 題</small></span></article>
+          <article className={`student-path-step ${todayGoalDone ? "done" : ""}`}><b>{todayGoalDone ? "✓" : "3"}</b><span><strong>回顧</strong><small>查看解釋</small></span></article>
+          <article className={`student-path-step reward ${todayGoalDone ? "unlocked" : ""}`}><b>★</b><span><strong>寶箱</strong><small>＋30 星</small></span></article>
+        </div>
+      </section>
+
+      <section className="student-home-overview" id="student-progress" aria-label="學習概覽">
+        <article><span className="student-stat-icon blue">✓</span><div><small>已完成練習</small><strong>{studentHomeStats.completed} 個</strong></div></article>
+        <article><span className="student-stat-icon gold">★</span><div><small>累積答對</small><strong>{studentHomeStats.correct} 題</strong></div></article>
+        <article><div className="student-accuracy-ring" style={{ "--student-progress": `${studentHomeStats.average}%` } as React.CSSProperties}><strong>{studentHomeStats.average}</strong><small>%</small></div><div><small>平均準確率</small><strong>{studentHomeStats.completed ? "繼續進步！" : "完成練習後顯示"}</strong></div></article>
+        <article><span className="student-stat-icon coral">♨</span><div><small>連續學習</small><strong>{studentHomeStats.streak} 天</strong></div></article>
+      </section>
+
+      <section className="student-subject-heading" id="student-subjects">
+        <div><span>選擇科目</span><h2>今天想探索甚麼？</h2></div>
+        <p>所有完成紀錄會自動儲存</p>
+      </section>
+
+      <div className="subject-grid student-subject-grid">{subjects.map(({ name, note, icon: Icon, colour }) => {
         const openSubject = name === "數學" ? openMaths : name === "中文" ? openChinese : name === "英文" ? openEnglish : openGeneralStudies;
         const action = name === "英文" ? "Start learning" : name === "中文" ? "查看課程" : "開始學習";
-        return <button className={`subject-card subject-button ${colour}`} key={name} onClick={openSubject}><div className="subject-icon"><Icon size={25} /></div><div><h2>{name}</h2><p>{note}</p></div><span className="coming available">{action}</span></button>;
+        const completedCount = studentHomeStats.subjectCompleted[name] || 0;
+        return <button className={`subject-card subject-button student-subject-card ${colour}`} key={name} onClick={openSubject}>
+          <div className="student-subject-top"><div className="subject-icon"><Icon size={24} /></div><span>↗</span></div>
+          <div><h2>{name}</h2><p>{note}</p></div>
+          <div className="student-subject-meta"><span>{completedCount ? `已完成 ${completedCount} 次練習` : "準備開始"}</span><b>{action}</b></div>
+        </button>;
       })}</div>
-      <aside className="progress-card"><div><span>你的年級</span><strong>{profile?.grade || "P3"}</strong></div><div><span>學習狀態</span><strong>準備開始</strong></div><div><span>今日目標</span><strong>完成 1 個練習</strong></div></aside>
-      <footer className="site-footer"><button onClick={openFeedback}>問題回報／意見</button><button onClick={() => setView("privacy")}>私隱聲明</button></footer>
+
+      {profile?.role === "student" && <section className="student-family-panel student-family-panel-v2"><div className="student-family-heading"><div className="parent-link-icon"><Link2 size={23} /></div><div><strong>家長連結</strong><p>產生一次性邀請碼，或處理家長的連結申請。</p></div><button onClick={createStudentParentCode}>{studentLinkCode ? "重新產生" : "產生邀請碼"}</button></div>{studentLinkCode && <div className="student-code-row"><div><span>一次性邀請碼</span><strong>{studentLinkCode}</strong><small>{studentLinkExpiry ? `${new Intl.DateTimeFormat("zh-HK", { hour: "2-digit", minute: "2-digit" }).format(new Date(studentLinkExpiry))} 前有效` : "30分鐘內有效"}</small></div><p>請只把邀請碼交給你的家長或監護人。家長提交後，仍須由你確認。</p></div>}{studentParentRequests.length > 0 && <div className="student-parent-requests">{studentParentRequests.map((request) => <article key={request.parent_id}><div><span className={`request-state ${request.status}`}>{request.status === "pending" ? "等待確認" : "已連結"}</span><strong>{request.display_name}</strong><small>{request.status === "pending" ? "希望查看你的學習成績及錯題" : "可以查看你的學習紀錄"}</small></div><div>{request.status === "pending" && <button className="approve-request" onClick={() => respondToParentRequest(request.parent_id, true)}>批准</button>}<button className="reject-request" onClick={() => respondToParentRequest(request.parent_id, false)}>{request.status === "pending" ? "拒絕" : "解除"}</button></div></article>)}</div>}{familyLinkMessage && <p className="family-link-message">{familyLinkMessage}</p>}</section>}
+
+      <footer className="site-footer student-home-footer"><button onClick={openFeedback}>問題回報／意見</button><button onClick={() => setView("privacy")}>私隱聲明</button></footer>
     </section>
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
 }
+
