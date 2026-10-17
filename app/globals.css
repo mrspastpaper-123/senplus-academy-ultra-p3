@@ -242,3 +242,99 @@ button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-
     animation: none;
   }
 }
+
+
+/* Twinko 多姿態互動場景 */
+.twinko-guide { width: clamp(108px, 10vw, 148px); }
+.twinko-guide__orbit {
+  position: absolute; inset: 17% 5% 5%; z-index: -1;
+  border: 1px dashed rgb(255 210 74 / 58%); border-radius: 50%;
+  box-shadow: 0 0 18px rgb(255 215 88 / 24%);
+  animation: twinko-orbit-spin 13s linear infinite;
+}
+.twinko-guide__bubble { animation: twinko-bubble-pop 420ms ease-out both; }
+.twinko-guide--celebrate .twinko-guide__image { animation: twinko-celebrate-bounce 1.25s ease-in-out infinite; }
+.twinko-guide--learn .twinko-guide__image { animation: twinko-reading-breathe 3.6s ease-in-out infinite; }
+.twinko-guide--quiet { width: clamp(86px, 7.5vw, 112px); opacity: 0.86; }
+.twinko-guide--quiet .twinko-guide__bubble { font-size: 0.74rem; }
+
+.twinko-companion {
+  position: fixed; z-index: 8; display: block;
+  width: clamp(62px, 6.6vw, 92px); height: auto;
+  pointer-events: none; opacity: 0.7;
+  filter: drop-shadow(0 8px 15px rgb(40 55 120 / 17%));
+}
+.twinko-companion--peek {
+  top: clamp(74px, 10vh, 118px); left: clamp(-18px, -1vw, -4px);
+  transform: rotate(12deg); animation: twinko-peek 5.8s ease-in-out infinite;
+}
+.twinko-companion--study {
+  top: 43%; right: clamp(-20px, -1vw, -5px);
+  width: clamp(58px, 6vw, 84px);
+  transform: rotate(-10deg); animation: twinko-study-drift 6.7s ease-in-out infinite;
+}
+.twinko-companion--celebrate {
+  opacity: 0.9; filter: drop-shadow(0 0 15px rgb(255 211 61 / 42%));
+}
+.twinko-companion--quiet { width: clamp(48px, 4.8vw, 68px); opacity: 0.4; }
+.twinko-guide--learn ~ .twinko-companion { display: none; }
+
+@keyframes twinko-orbit-spin { to { transform: rotate(360deg); } }
+@keyframes twinko-bubble-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes twinko-celebrate-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-9px) scale(1.04); }
+  70% { transform: translateY(-2px) scale(0.99); }
+}
+@keyframes twinko-reading-breathe {
+  0%, 100% { transform: rotate(-1deg) scale(1); }
+  50% { transform: rotate(1deg) scale(1.025); }
+}
+@keyframes twinko-peek {
+  0%, 100% { transform: translateX(-9px) translateY(0) rotate(12deg); }
+  50% { transform: translateX(2px) translateY(-7px) rotate(7deg); }
+}
+@keyframes twinko-study-drift {
+  0%, 100% { transform: translateX(8px) translateY(0) rotate(-10deg); }
+  50% { transform: translateX(-1px) translateY(8px) rotate(-5deg); }
+}
+
+@media (max-width: 900px) {
+  .twinko-guide { width: 78px; }
+  .twinko-companion--peek { top: 62px; left: -14px; width: 50px; opacity: 0.52; }
+  .twinko-companion--study { display: none; }
+  .twinko-guide--quiet ~ .twinko-companion { display: none; }
+}
+@media (max-width: 520px) {
+  .twinko-companion--peek { width: 42px; opacity: 0.44; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .twinko-guide__orbit, .twinko-guide__bubble, .twinko-guide__image, .twinko-companion { animation: none; }
+}
+
+
+/* Twinko 思考與指路姿態 */
+.twinko-guide--think .twinko-guide__image {
+  animation: twinko-thinking-tilt 3.2s ease-in-out infinite;
+}
+.twinko-guide--guide .twinko-guide__image {
+  animation: twinko-pointing-nudge 2.8s ease-in-out infinite;
+}
+.twinko-guide--think ~ .twinko-companion,
+.twinko-guide--learn ~ .twinko-companion {
+  display: none;
+}
+.twinko-guide--guide ~ .twinko-companion--study {
+  opacity: 0.58;
+}
+@keyframes twinko-thinking-tilt {
+  0%, 100% { transform: rotate(-2deg) translateY(0); }
+  50% { transform: rotate(2deg) translateY(-5px); }
+}
+@keyframes twinko-pointing-nudge {
+  0%, 100% { transform: translateX(0) scale(1); }
+  50% { transform: translateX(-5px) scale(1.025); }
+}
