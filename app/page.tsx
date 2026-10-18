@@ -113,7 +113,16 @@ type QuestionDataDiagram = {
 function getQuestionDataDiagram(text: string, unitCode: string): QuestionDataDiagram | null {
   if (unitCode !== "3D1") return null;
   const swim = text.match(/象形圖以一個「([^」]+)」代表\s*(\d+)\s*位學生；游泳一欄有\s*(\d+)\s*個「([^」]+)」/);
-  if (swim && swim[1] === swim[4]) return { kind: "pictogram", symbol: swim[1], scale: Number(swim[2]), unit: "位學生", items: [{ label: "游泳", value: Number(swim[3]) }] };
+  if (swim && swim[1] === swim[4]) {
+    const swimmingSymbols = Number(swim[3]);
+    // Additional exercise categories; the queried swimming data remains intact.
+    return { kind: "pictogram", symbol: swim[1], scale: Number(swim[2]), unit: "位學生", items: [
+      { label: "游泳", value: swimmingSymbols },
+      { label: "足球", value: Math.max(2, swimmingSymbols - 2) },
+      { label: "籃球", value: swimmingSymbols + 1 },
+      { label: "羽毛球", value: Math.max(1, swimmingSymbols - 4) },
+    ] };
+  }
   const sport = text.match(/足球有\s*(\d+)\s*個「★」、籃球有\s*(\d+)\s*個「★」；每個「★」代表\s*(\d+)\s*人/);
   if (sport) return { kind: "pictogram", symbol: "★", scale: Number(sport[3]), unit: "人", items: [{ label: "足球", value: Number(sport[1]) }, { label: "籃球", value: Number(sport[2]) }] };
   const groups = text.match(/甲組有\s*(\d+)\s*個「■」，乙組有\s*(\d+)\s*個「■」；每個「■」代表\s*(\d+)\s*人/);
@@ -147,9 +156,9 @@ function QuestionDataDiagramView({ text, unitCode }: { text: string; unitCode: s
     return <figure className="question-data-diagram">
       <figcaption>象形圖</figcaption>
       <p className="pictogram-key">圖例：<span>{diagram.symbol}</span> 代表 {diagram.scale} {diagram.unit}</p>
-      <svg className="pictogram-svg" viewBox="0 0 360 116" role="img" aria-label={`象形圖，${diagram.items.map((item) => `${item.label}有${item.value}個${diagram.symbol}`).join("；")}`}>
+      <svg className="pictogram-svg" viewBox={`0 0 360 ${diagram.items.length > 2 ? 156 : 116}`} style={{ height: diagram.items.length > 2 ? 156 : 116 }} role="img" aria-label={`象形圖，${diagram.items.map((item) => `${item.label}有${item.value}個${diagram.symbol}`).join("；")}`}>
         {diagram.items.map((item, index) => {
-          const y = diagram.items.length === 1 ? 58 : 30 + index * 48;
+          const y = diagram.items.length > 2 ? 20 + index * 36 : diagram.items.length === 1 ? 58 : 30 + index * 48;
           return <g key={item.label}>
             <text x="3" y={y + 5} className="pictogram-row-label">{item.label}</text>
             {Array.from({ length: item.value }, (_, i) => <text key={i} x={70 + i * iconWidth} y={y + 6} textAnchor="middle" className="pictogram-symbol" fill={index ? "#d59a38" : "#5688ce"}>{diagram.symbol}</text>)}
