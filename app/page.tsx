@@ -101,6 +101,89 @@ function renderMarkedText(value: string) {
   );
 }
 
+type QuestionDataDiagram = {
+  kind: "pictogram" | "pictogram-task" | "bar";
+  symbol: string;
+  scale: number;
+  unit: string;
+  items: { label: string; value: number }[];
+  target?: number;
+};
+
+function getQuestionDataDiagram(text: string, unitCode: string): QuestionDataDiagram | null {
+  if (unitCode !== "3D1") return null;
+  const swim = text.match(/象形圖以一個「([^」]+)」代表\s*(\d+)\s*位學生；游泳一欄有\s*(\d+)\s*個「([^」]+)」/);
+  if (swim && swim[1] === swim[4]) return { kind: "pictogram", symbol: swim[1], scale: Number(swim[2]), unit: "位學生", items: [{ label: "游泳", value: Number(swim[3]) }] };
+  const sport = text.match(/足球有\s*(\d+)\s*個「★」、籃球有\s*(\d+)\s*個「★」；每個「★」代表\s*(\d+)\s*人/);
+  if (sport) return { kind: "pictogram", symbol: "★", scale: Number(sport[3]), unit: "人", items: [{ label: "足球", value: Number(sport[1]) }, { label: "籃球", value: Number(sport[2]) }] };
+  const groups = text.match(/甲組有\s*(\d+)\s*個「■」，乙組有\s*(\d+)\s*個「■」；每個「■」代表\s*(\d+)\s*人/);
+  if (groups) return { kind: "pictogram", symbol: "■", scale: Number(groups[3]), unit: "人", items: [{ label: "甲組", value: Number(groups[1]) }, { label: "乙組", value: Number(groups[2]) }] };
+  const task = text.match(/製作象形圖，每個「([^」]+)」代表\s*(\d+)\s*本書。若要表示\s*(\d+)\s*本書/);
+  if (task) return { kind: "pictogram-task", symbol: task[1], scale: Number(task[2]), unit: "本書", items: [], target: Number(task[3]) };
+  const books = text.match(/星期一借出\s*(\d+)\s*本書，星期二借出\s*(\d+)\s*本書/);
+  if (books) return { kind: "bar", symbol: "", scale: 1, unit: "本書", items: [{ label: "星期一", value: Number(books[1]) }, { label: "星期二", value: Number(books[2]) }] };
+  const classes = text.match(/甲班有\s*(\d+)\s*人參加繪畫，乙班有\s*(\d+)\s*人參加/);
+  if (classes) return { kind: "bar", symbol: "", scale: 1, unit: "人", items: [{ label: "甲班", value: Number(classes[1]) }, { label: "乙班", value: Number(classes[2]) }] };
+  const fruits = text.match(/蘋果：\s*(\d+)\s*人；香蕉：\s*(\d+)\s*人；橙：\s*(\d+)\s*人；梨：\s*(\d+)\s*人/);
+  if (fruits) return { kind: "bar", symbol: "", scale: 1, unit: "人", items: ["蘋果", "香蕉", "橙", "梨"].map((label, i) => ({ label, value: Number(fruits[i + 1]) })) };
+  const paper = text.match(/紅組：\s*(\d+)\s*張；藍組：\s*(\d+)\s*張；黃組：\s*(\d+)\s*張；綠組：\s*(\d+)\s*張/);
+  if (paper) return { kind: "bar", symbol: "", scale: 1, unit: "張", items: ["紅組", "藍組", "黃組", "綠組"].map((label, i) => ({ label, value: Number(paper[i + 1]) })) };
+  return null;
+}
+
+function QuestionDataDiagramView({ text, unitCode }: { text: string; unitCode: string }) {
+  const diagram = getQuestionDataDiagram(text, unitCode);
+  if (!diagram || diagram.scale <= 0 || diagram.items.some((item) => !Number.isInteger(item.value) || item.value < 0 || item.value > 100)) return null;
+  const palette = text.includes("收集紙張") ? ["#d85d64", "#5688ce", "#d1a22d", "#49a47a"] : ["#5688ce", "#d59a38", "#8a68bd", "#49a47a"];
+  if (diagram.kind === "pictogram-task") return <figure className="question-data-diagram pictogram-task">
+    <figcaption>製作象形圖</figcaption>
+    <p className="pictogram-key">圖例：<span>{diagram.symbol}</span> 代表 {diagram.scale} {diagram.unit}</p>
+    <div className="pictogram-target">要表示：<strong>{diagram.target} {diagram.unit}</strong></div>
+    <div className="pictogram-empty" aria-label="待完成的象形圖畫布"><span>？</span><p>這裏應畫多少個「{diagram.symbol}」？</p></div>
+  </figure>;
+  if (diagram.kind === "pictogram") {
+    const maxIcons = Math.max(1, ...diagram.items.map((item) => item.value));
+    const iconWidth = Math.min(24, 278 / maxIcons);
+    return <figure className="question-data-diagram">
+      <figcaption>象形圖</figcaption>
+      <p className="pictogram-key">圖例：<span>{diagram.symbol}</span> 代表 {diagram.scale} {diagram.unit}</p>
+      <svg className="pictogram-svg" viewBox="0 0 360 116" role="img" aria-label={`象形圖，${diagram.items.map((item) => `${item.label}有${item.value}個${diagram.symbol}`).join("；")}`}>
+        {diagram.items.map((item, index) => {
+          const y = diagram.items.length === 1 ? 58 : 30 + index * 48;
+          return <g key={item.label}>
+            <text x="3" y={y + 5} className="pictogram-row-label">{item.label}</text>
+            {Array.from({ length: item.value }, (_, i) => <text key={i} x={70 + i * iconWidth} y={y + 6} textAnchor="middle" className="pictogram-symbol" fill={index ? "#d59a38" : "#5688ce"}>{diagram.symbol}</text>)}
+          </g>;
+        })}
+      </svg>
+    </figure>;
+  }
+  const largest = Math.max(1, ...diagram.items.map((item) => item.value));
+  // Every minor grid line is one unit; number labels stay clear on small screens.
+  const axisMax = Math.ceil(largest / 5) * 5;
+  const plotLeft = 62;
+  const plotWidth = 272;
+  const plotTop = 18;
+  const plotBottom = 154;
+  const rowHeight = (plotBottom - plotTop) / diagram.items.length;
+  return <figure className="question-data-diagram">
+    <figcaption>條形圖<span>每小格代表 1 {diagram.unit}</span></figcaption>
+    <svg className="data-bars-svg" viewBox="0 0 360 192" role="img" aria-label={`條形圖，類別：${diagram.items.map((item) => item.label).join("、")}；數量單位：${diagram.unit}`}>
+      {Array.from({ length: axisMax + 1 }, (_, i) => {
+        const x = plotLeft + i / axisMax * plotWidth;
+        return <g key={i}><line x1={x} x2={x} y1={plotTop} y2={plotBottom} stroke={i % 5 ? "#edf0f6" : "#ced6e5"} />{i % 5 === 0 && <text x={x} y="172" textAnchor="middle">{i}</text>}</g>;
+      })}
+      {diagram.items.map((item, i) => {
+        const y = plotTop + (i + .5) * rowHeight;
+        return <g key={item.label}><text x="53" y={y + 5} textAnchor="end">{item.label}</text><rect x={plotLeft} y={y - rowHeight * .28} width={item.value / axisMax * plotWidth} height={rowHeight * .56} rx="3" fill={palette[i]} /></g>;
+      })}
+      <line x1={plotLeft} x2={plotLeft} y1={plotTop} y2={plotBottom} stroke="#67738b" strokeWidth="1.5" />
+      <line x1={plotLeft} x2={plotLeft + plotWidth} y1={plotBottom} y2={plotBottom} stroke="#67738b" strokeWidth="1.5" />
+      <text x="334" y="189" textAnchor="end">數量（{diagram.unit}）</text>
+    </svg>
+  </figure>;
+}
+
 function TwinkoGuide({ view, answerCorrect }: { view: string; answerCorrect: boolean | null }) {
   const subjectViews = ["maths", "english", "chinese", "humanities", "science", "generalStudies"];
   const quietViews = ["parent", "admin", "adminFeedback", "studentErrors", "studentDetail", "quality", "students", "feedback", "privacy", "status"];
@@ -1560,7 +1643,7 @@ export default function Home() {
         <div className="writing-guidance"><strong>寫作提示</strong><div>{writingPrompt.guidance.map((item) => <span key={item}>{item}</span>)}</div></div>
         {!writingResult ? <><textarea className="writing-editor" value={writingContent} onChange={(event) => setWritingContent(event.target.value)} placeholder="在這裏輸入作文……&#10;&#10;建議按內容分段，完成後再檢查錯別字和標點。" rows={18} disabled={practiceLoading} /><div className="writing-actions"><span>{writingCharCount < 50 ? `最少還需 ${50 - writingCharCount} 字才可提交` : "可以提交；系統會儲存全文並按四項準則評改。"}</span><button className="submit-answer" disabled={writingCharCount < 50 || practiceLoading} onClick={submitWritingTask}>{practiceLoading ? "正在儲存及評改…" : "提交作文"}</button></div></> : <div className="writing-result"><div className="writing-score"><span>自動評改</span><strong>{writingResult.score}<small>／100</small></strong><p>{writingResult.char_count} 字 · 作文已儲存</p></div><div className="writing-rubric">{Object.entries(writingResult.rubric).map(([name, score]) => <div key={name}><span>{name}</span><strong>{score}</strong></div>)}</div><div className="writing-feedback"><Lightbulb size={20} /><div><strong>改善建議</strong><p>{writingResult.feedback}</p><small>這是按篇幅、段落、標點和題目重點作出的初步評估；老師評語及分數會以人工評閱為準。</small></div></div><button className="retry-button" onClick={() => startWritingTask(activeUnit!)}><RotateCcw size={18} />抽選另一題</button></div>}
       </section>}
-      {!isReadingUnit && !isWritingUnit && currentQuestion && <section className="question-card"><div className="practice-progress"><span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} /></div><div className="question-meta"><span>第 {currentIndex + 1} 題／共 {questions.length} 題</span><span>四選一</span></div><h2>{renderMarkedText(stripQuestionMetadata(currentQuestion.question_text))}</h2><div className="option-list">{displayedOptions.map((option) => <label className={`option ${selectedAnswer === option.id ? "selected" : ""} ${feedback ? "locked" : ""}`} key={option.id}><input type="radio" name="answer" value={option.id} checked={selectedAnswer === option.id} disabled={!!feedback} onChange={() => setSelectedAnswer(option.id)} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>
+      {!isReadingUnit && !isWritingUnit && currentQuestion && <section className="question-card"><div className="practice-progress"><span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} /></div><div className="question-meta"><span>第 {currentIndex + 1} 題／共 {questions.length} 題</span><span>四選一</span></div><h2>{renderMarkedText(stripQuestionMetadata(currentQuestion.question_text))}</h2><QuestionDataDiagramView text={currentQuestion.question_text} unitCode={activeUnit?.code || ""} /><div className="option-list">{displayedOptions.map((option) => <label className={`option ${selectedAnswer === option.id ? "selected" : ""} ${feedback ? "locked" : ""}`} key={option.id}><input type="radio" name="answer" value={option.id} checked={selectedAnswer === option.id} disabled={!!feedback} onChange={() => setSelectedAnswer(option.id)} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>
         {!feedback && <button className="submit-answer" disabled={!selectedAnswer || practiceLoading} onClick={submitAnswer}>{practiceLoading ? "批改中…" : "提交答案"}</button>}
         {feedback && <div className={`feedback ${feedback.is_correct ? "correct" : "incorrect"}`}><h3>{feedback.is_correct ? "答對了！" : "答案不正確"}</h3><p>正確答案：{displayedOptions.find((option) => option.id === feedback.correct_answer)?.label} · {renderMarkedText(displayedOptions.find((option) => option.id === feedback.correct_answer)?.text || "")}</p>{feedback.explanation && <p>{renderMarkedText(feedback.explanation)}</p>}{feedback.completed ? <div className="final-score"><span>完成10題</span><strong>{feedback.correct_count}／{feedback.total_questions} 題答對</strong><b>{feedback.score ?? 0} 分</b></div> : <button className="next-question" onClick={nextQuestion}>下一題</button>}</div>}
       </section>}
