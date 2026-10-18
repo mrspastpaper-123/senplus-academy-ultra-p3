@@ -85,7 +85,29 @@ function localiseQuestion<T extends PracticeQuestion>(question: T): T {
   };
 }
 
+function getPictogramPreferenceTheme(text: string) {
+  const match = text.match(/象形圖以一個「([^」]+)」代表\s*(\d+)\s*位學生；游泳一欄有\s*(\d+)\s*個「([^」]+)」/);
+  if (!match || match[1] !== match[4]) return null;
+  const themes = [
+    { title: "喜愛的運動", labels: ["游泳", "足球", "籃球", "羽毛球"] },
+    { title: "喜愛的文具", labels: ["鉛筆", "擦膠", "間尺", "原子筆"] },
+    { title: "喜愛的食物", labels: ["麵包", "飯糰", "餅乾", "水果"] },
+    { title: "喜愛的交通工具", labels: ["巴士", "港鐵", "小巴", "電車"] },
+    { title: "喜愛的運動", labels: ["羽毛球", "乒乓球", "籃球", "跑步"] },
+    { title: "喜愛的文具", labels: ["彩色筆", "膠水", "剪刀", "筆袋"] },
+    { title: "喜愛的水果", labels: ["蘋果", "香蕉", "橙", "梨"] },
+    { title: "喜愛的交通方式", labels: ["步行", "單車", "巴士", "港鐵"] },
+    { title: "喜愛的運動", labels: ["足球", "游泳", "排球", "網球"] },
+    { title: "喜愛的食物", labels: ["麵食", "米飯", "壽司", "三文治"] },
+  ];
+  const count = Number(match[3]);
+  if (count < 3 || count > 12) return null;
+  return { ...themes[count - 3], symbol: match[1], scale: Number(match[2]), count };
+}
+
 function stripQuestionMetadata(value: string) {
+  const theme = getPictogramPreferenceTheme(value);
+  if (theme) value = `${theme.title}的象形圖中，每個「${theme.symbol}」代表 ${theme.scale} 位學生；${theme.labels[0]}一欄有 ${theme.count} 個「${theme.symbol}」。喜愛${theme.labels[0]}的有多少位學生？`;
   return value
     .replace(/^\s*【[^】]+】\s*/u, "")
     // Generated bank group labels are not part of the learning prompt.
@@ -115,12 +137,13 @@ function getQuestionDataDiagram(text: string, unitCode: string): QuestionDataDia
   const swim = text.match(/象形圖以一個「([^」]+)」代表\s*(\d+)\s*位學生；游泳一欄有\s*(\d+)\s*個「([^」]+)」/);
   if (swim && swim[1] === swim[4]) {
     const swimmingSymbols = Number(swim[3]);
-    // Additional exercise categories; the queried swimming data remains intact.
+    const theme = getPictogramPreferenceTheme(text);
+    const labels = theme?.labels || ["游泳", "足球", "籃球", "羽毛球"];
     return { kind: "pictogram", symbol: swim[1], scale: Number(swim[2]), unit: "位學生", items: [
-      { label: "游泳", value: swimmingSymbols },
-      { label: "足球", value: Math.max(2, swimmingSymbols - 2) },
-      { label: "籃球", value: swimmingSymbols + 1 },
-      { label: "羽毛球", value: Math.max(1, swimmingSymbols - 4) },
+      { label: labels[0], value: swimmingSymbols },
+      { label: labels[1], value: Math.max(2, swimmingSymbols - 2) },
+      { label: labels[2], value: swimmingSymbols + 1 },
+      { label: labels[3], value: Math.max(1, swimmingSymbols - 4) },
     ] };
   }
   const sport = text.match(/足球有\s*(\d+)\s*個「★」、籃球有\s*(\d+)\s*個「★」；每個「★」代表\s*(\d+)\s*人/);
@@ -154,7 +177,7 @@ function QuestionDataDiagramView({ text, unitCode }: { text: string; unitCode: s
     const maxIcons = Math.max(1, ...diagram.items.map((item) => item.value));
     const iconWidth = Math.min(24, 278 / maxIcons);
     return <figure className="question-data-diagram">
-      <figcaption>象形圖</figcaption>
+      <figcaption>{getPictogramPreferenceTheme(text)?.title || "象形圖"}</figcaption>
       <p className="pictogram-key">圖例：<span>{diagram.symbol}</span> 代表 {diagram.scale} {diagram.unit}</p>
       <svg className="pictogram-svg" viewBox={`0 0 360 ${diagram.items.length > 2 ? 156 : 116}`} style={{ height: diagram.items.length > 2 ? 156 : 116 }} role="img" aria-label={`象形圖，${diagram.items.map((item) => `${item.label}有${item.value}個${diagram.symbol}`).join("；")}`}>
         {diagram.items.map((item, index) => {
