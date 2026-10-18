@@ -1056,7 +1056,7 @@ export default function Home() {
       setUnitsMessage("未能載入數學單位，請稍後再試。");
     } else {
       const domainMap = new Map(domains.map((domain) => [domain.id, { title_zh: domain.name_zh, code: domain.code }]));
-      setMathsUnits((data || []).map((unit) => ({ ...unit, curriculum_domains: domainMap.get(unit.domain_id) || null })) as MathsUnit[]);
+      setMathsUnits((data || []).map((unit) => ({ ...unit, ...(unit.code === "3D1" ? { title_zh: "棒形圖（一）", title_en: "Bar Charts (I)" } : {}), curriculum_domains: domainMap.get(unit.domain_id) || null })) as MathsUnit[]);
     }
     setUnitsLoading(false);
   }
