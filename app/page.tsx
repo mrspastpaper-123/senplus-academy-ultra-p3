@@ -86,7 +86,11 @@ function localiseQuestion<T extends PracticeQuestion>(question: T): T {
 }
 
 function stripQuestionMetadata(value: string) {
-  return value.replace(/^\s*【[^】]+】\s*/u, "").trimStart();
+  return value
+    .replace(/^\s*【[^】]+】\s*/u, "")
+    // Generated bank group labels are not part of the learning prompt.
+    .replace(/[ \t]*[（(]\s*set\s+[0-9]+[a-z]?(?:[.-][0-9a-z]+)*\s*[）)]/gi, "")
+    .trimStart();
 }
 
 function renderMarkedText(value: string) {
