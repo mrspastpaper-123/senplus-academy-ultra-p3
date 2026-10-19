@@ -1721,3 +1721,22 @@ button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-
   .practice-flow-v2 .question-card:has(.question-data-diagram)>.feedback{grid-column:2;grid-row:5;margin-top:10px}
 }
 @media(max-width:900px){.question-data-diagram{margin:0 0 16px}}
+
+/* Matching-topic cards derive their title solely from the question prompt. */
+.question-topic-card{margin:4px 0 16px;padding:14px 18px;border:2px solid #b7d4cf;border-radius:20px;background:#fff;box-shadow:0 7px 18px #28685b0a;min-width:0;text-align:center}
+.question-topic-card-kind{display:block;font-size:15px;font-weight:700;color:#4b7776;text-align:left}
+.question-topic-card svg{display:block;width:240px;max-width:100%;height:auto;margin:4px auto}
+.question-topic-card figcaption{font-size:24px;font-weight:800;color:#265c61;line-height:1.4;overflow-wrap:anywhere}
+.question-topic-card-slot{margin-top:12px;border:2px dashed #accbc6;border-radius:12px;padding:12px 8px;color:#557475;font-size:16px;line-height:1.5}
+.question-card:has(.question-topic-card)>.option-list .option{min-height:76px;border:2px solid #c8dfda;border-radius:14px;background:#f9fcfb}
+.question-card:has(.question-topic-card)>.option-list .option.selected{border-color:#4a9b8b;background:#ecf8f3}
+@media(min-width:1100px){
+.practice-flow-v2 .question-card:has(.question-topic-card){display:grid;grid-template-columns:minmax(320px,1fr) minmax(0,1.15fr);column-gap:20px;align-items:start}
+.practice-flow-v2 .question-card:has(.question-topic-card)>.practice-progress,
+.practice-flow-v2 .question-card:has(.question-topic-card)>.question-meta,
+.practice-flow-v2 .question-card:has(.question-topic-card)>h2{grid-column:1/-1}
+.practice-flow-v2 .question-card>.question-topic-card{grid-column:1;grid-row:4/7}
+.practice-flow-v2 .question-card:has(.question-topic-card)>.option-list{grid-column:2;grid-row:4;grid-template-columns:1fr}
+.practice-flow-v2 .question-card:has(.question-topic-card)>.submit-answer,
+.practice-flow-v2 .question-card:has(.question-topic-card)>.feedback{grid-column:2;grid-row:5}
+}
