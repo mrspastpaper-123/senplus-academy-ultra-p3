@@ -1,4 +1,5 @@
 "use client";
+import { cleanLearningText } from "./learning-text";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createClient, Session } from "@supabase/supabase-js";
@@ -66,7 +67,7 @@ function answerValue(value: unknown) {
 
 function parentAnswerText(error: ParentError, value: unknown) {
   const id = answerValue(value);
-  return error.options?.find((option) => option.id === id)?.text || id;
+  return cleanLearningText(error.options?.find((option) => option.id === id)?.text || id);
 }
 
 function localiseCurrency(value: string) {
@@ -106,17 +107,11 @@ function getPictogramPreferenceTheme(text: string) {
 }
 
 function stripQuestionMetadata(value: string) {
-  const theme = getPictogramPreferenceTheme(value);
-  if (theme) value = `${theme.title}的象形圖中，每個「${theme.symbol}」代表 ${theme.scale} 位學生；${theme.labels[0]}一欄有 ${theme.count} 個「${theme.symbol}」。喜愛${theme.labels[0]}的有多少位學生？`;
-  return value
-    .replace(/^\s*【[^】]+】\s*/u, "")
-    // Generated bank group labels are not part of the learning prompt.
-    .replace(/[ \t]*[（(]\s*set\s+[0-9]+[a-z]?(?:[.-][0-9a-z]+)*\s*[）)]/gi, "")
-    .trimStart();
+  return cleanLearningText(value);
 }
 
 function renderMarkedText(value: string) {
-  return value.split(/((?:[^\u0332]\u0332)+)/g).filter(Boolean).map((part, index) =>
+  return cleanLearningText(value).split(/((?:[^\u0332]\u0332)+)/g).filter(Boolean).map((part, index) =>
     part.includes("\u0332")
       ? <span className="proper-name" key={index}>{cleanMarkedText(part)}</span>
       : cleanMarkedText(part)
@@ -1428,7 +1423,7 @@ export default function Home() {
     const optionText = (question: WrongQuestion | undefined, value: unknown) => {
       const id = answerValue(value);
       const option = question?.options?.find((item) => item.id === id);
-      return cleanMarkedText(option ? `${id} · ${option.text}` : id);
+      return cleanMarkedText(cleanLearningText(option ? `${id} · ${option.text}` : id));
     };
     const displayQuestionText = (question: WrongQuestion | undefined) => {
       const text = question?.question_text || "題目內容暫時未能顯示";
