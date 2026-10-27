@@ -1283,7 +1283,11 @@ button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-
   .student-home-v2 .student-home-hero-copy>p{margin:10px 0 13px;font-size:12px;line-height:1.5}
   .student-home-v2 .student-home-actions{gap:8px}
   .student-home-v2 .student-home-actions button{min-height:38px;padding:0 14px;border-radius:12px;font-size:11px}
-  .student-home-v2 .student-admin-entry{position:absolute;left:26px;bottom:12px;margin:0}
+  .student-home-v2 .student-admin-entry{position:static;margin:0;flex:0 0 auto;white-space:nowrap;gap:7px;box-shadow:none}
+  .student-home-v2 .student-home-actions .student-admin-entry small{display:none}
+  .student-home-v2 .student-home-hero-copy:has(.student-admin-entry){padding-top:14px;padding-bottom:14px}
+  .student-home-v2 .student-home-hero-copy:has(.student-admin-entry) h1{font-size:clamp(28px,2.5vw,34px)}
+  .student-home-v2 .student-home-hero-copy:has(.student-admin-entry)>p{margin:7px 0 9px}
   .student-home-v2 .student-home-visual{min-height:0;height:100%}
   .student-home-v2 .student-home-visual:before{width:180px;height:180px}
   .student-home-v2 .student-home-visual img{width:min(190px,78%)}
