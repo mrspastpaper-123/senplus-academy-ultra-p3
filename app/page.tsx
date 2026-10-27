@@ -1829,8 +1829,8 @@ export default function Home() {
           <div className="student-home-actions">
             <button className="student-primary-action" onClick={continueHomeLearning}><span>▶</span>{studentHomeStats.lastSubject ? "繼續上次科目" : "開始第一個練習"}</button>
             <button className="student-secondary-action" onClick={() => document.getElementById("student-subjects")?.scrollIntoView({ behavior: "smooth" })}>查看全部科目</button>
+            {profile?.role === "admin" && <button className="admin-entry student-admin-entry" onClick={openAdminDashboard}><LayoutDashboard size={20} /><span><strong>管理員儀表板</strong><small>查看學習成績與進度</small></span></button>}
           </div>
-          {profile?.role === "admin" && <button className="admin-entry student-admin-entry" onClick={openAdminDashboard}><LayoutDashboard size={20} /><span><strong>管理員儀表板</strong><small>查看學習成績與進度</small></span></button>}
         </div>
         <div className="student-home-visual" aria-label="Twinko 學習小導師">
           <span className="student-home-orbit orbit-one" aria-hidden="true" />
