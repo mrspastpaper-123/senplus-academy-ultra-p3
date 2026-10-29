@@ -1227,13 +1227,7 @@ export default function Home() {
     if (error || !data?.success) setPracticeMessage(data?.reason === "already_answered" ? "這題已經提交，不能重複作答。" : "未能提交答案，請稍後再試。");
     else {
       const result = data as AnswerFeedback;
-      if (result.completed) {
-        setCompletedResult(result);
-        setView("complete");
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } else {
-        setFeedback(result);
-      }
+      setFeedback(result);
     }
     setPracticeLoading(false);
   }
@@ -1265,7 +1259,13 @@ export default function Home() {
   }
 
   function nextQuestion() {
-    if (!feedback || feedback.completed) return;
+    if (!feedback) return;
+    if (feedback.completed) {
+      setCompletedResult(feedback);
+      setView("complete");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setCurrentIndex((index) => index + 1); setSelectedAnswer(""); setFeedback(null); setPracticeMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1739,7 +1739,7 @@ export default function Home() {
       </section>}
       {!isReadingUnit && !isWritingUnit && currentQuestion && <section className="question-card"><div className="practice-progress"><span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} /></div><div className="question-meta"><span>第 {currentIndex + 1} 題／共 {questions.length} 題</span><span>四選一</span></div><h2>{renderMarkedText(stripQuestionMetadata(currentQuestion.question_text))}</h2><QuestionTopicCard text={currentQuestion.question_text} /><QuestionDataDiagramView text={currentQuestion.question_text} unitCode={activeUnit?.code || ""} /><div className="option-list">{displayedOptions.map((option) => <label className={`option ${selectedAnswer === option.id ? "selected" : ""} ${feedback ? "locked" : ""}`} key={option.id}><input type="radio" name="answer" value={option.id} checked={selectedAnswer === option.id} disabled={!!feedback} onChange={() => setSelectedAnswer(option.id)} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>
         {!feedback && <button className="submit-answer" disabled={!selectedAnswer || practiceLoading} onClick={submitAnswer}>{practiceLoading ? "批改中…" : "提交答案"}</button>}
-        {feedback && <div className={`feedback ${feedback.is_correct ? "correct" : "incorrect"}`}><h3>{feedback.is_correct ? "答對了！" : "答案不正確"}</h3><p>正確答案：{displayedOptions.find((option) => option.id === feedback.correct_answer)?.label} · {renderMarkedText(displayedOptions.find((option) => option.id === feedback.correct_answer)?.text || "")}</p>{feedback.explanation && <p>{renderMarkedText(feedback.explanation)}</p>}{feedback.completed ? <div className="final-score"><span>完成10題</span><strong>{feedback.correct_count}／{feedback.total_questions} 題答對</strong><b>{feedback.score ?? 0} 分</b></div> : <button className="next-question" onClick={nextQuestion}>下一題</button>}</div>}
+        {feedback && <div className={`feedback ${feedback.is_correct ? "correct" : "incorrect"}`}><h3>{feedback.is_correct ? "答對了！" : "答案不正確"}</h3><p>正確答案：{displayedOptions.find((option) => option.id === feedback.correct_answer)?.label} · {renderMarkedText(displayedOptions.find((option) => option.id === feedback.correct_answer)?.text || "")}</p>{feedback.explanation && <p>{renderMarkedText(feedback.explanation)}</p>}<button className="next-question" onClick={nextQuestion}>{feedback.completed ? "查看成績" : "下一題"}</button></div>}
       </section>}
     </section>
   </main>;
