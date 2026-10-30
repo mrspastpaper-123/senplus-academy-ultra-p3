@@ -1,4 +1,5 @@
 "use client";
+import StudentLearningProgress from "./student-learning-progress";
 import { QuestionTopicCard } from "./question-topic-card";
 import { cleanLearningText } from "./learning-text";
 
@@ -70,7 +71,7 @@ type StudentHomeStats = {
   lastUnitTitle: string | null;
   subjectCompleted: Record<string, number>;
 };
-type AppView = "subjects" | "parent" | "chinese" | "english" | "maths" | "generalStudies" | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
+type AppView = "progress" | "subjects" | "parent" | "chinese" | "english" | "maths" | "generalStudies" | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
 type AuthMode = "login" | "register";
 type RegistrationRole = "student" | "parent";
 
@@ -773,6 +774,12 @@ export default function Home() {
     setRegistrationLoading(false);
   }
 
+  function openStudentProgress() {
+    if (profile?.role !== "student") return;
+    setView("progress");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function signOut() { await supabase.auth.signOut(); setMessage(""); }
 
   async function changeFirstLoginPassword(event: FormEvent) {
@@ -1407,6 +1414,13 @@ export default function Home() {
 
   if (profile && !profile.login_allowed) return <main className="status-page"><TwinkoGuide view="status" answerCorrect={feedback?.is_correct ?? null} /><div className="status-card">{profile.approved_at ? <><h1>帳戶暫停使用</h1><p>此帳戶已由管理員暫停。請聯絡 SENPlus+ 管理員重新啟用登入權限。</p></> : <><h1>帳戶等待批准</h1><p>你的帳戶已成功建立，現正等待 SENPlus+ 管理員批准。批准後便可登入平台。</p></>}<button onClick={signOut}>登出</button></div></main>;
 
+  if (view === "progress" && profile?.role === "student" && profile.login_allowed) return (
+    <StudentLearningProgress key={session.user.id} client={supabase} studentId={session.user.id}
+      grade={profile.grade || "P3"} displayName={profile.display_name || "同學"}
+      subjects={subjects.map(subject => subject.name)} onBack={() => { setView("subjects"); window.scrollTo({ top: 0 }); }}
+      onSignOut={() => void signOut()} onPractice={index => { window.scrollTo({ top: 0 }); void [openChinese, openEnglish, openMaths, openGeneralStudies][index]?.(); }} />
+  );
+
   if (view === "parent" && profile?.role === "parent") {
     const selectedChild = parentChildren.find((child) => child.student_id === selectedParentChildId) || parentChildren[0];
     const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat("zh-HK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "尚未開始";
@@ -1810,7 +1824,7 @@ export default function Home() {
       <nav className="student-home-nav" aria-label="學生主選單">
         <button className="active" onClick={() => setView("subjects")}>我的學習</button>
         <button onClick={() => document.getElementById("student-subjects")?.scrollIntoView({ behavior: "smooth" })}>全部科目</button>
-        <button onClick={() => document.getElementById("student-progress")?.scrollIntoView({ behavior: "smooth" })}>學習進度</button>
+        {profile?.role === "student" && <button onClick={openStudentProgress}>學習進度</button>}
       </nav>
       <div className="account student-home-account">
         <span className="student-star-bank"><b>★</b>{studentHomeStats.starCount.toLocaleString("zh-HK")}</span>
@@ -1829,6 +1843,7 @@ export default function Home() {
           <div className="student-home-actions">
             <button className="student-primary-action" onClick={continueHomeLearning}><span>▶</span>{studentHomeStats.lastSubject ? "繼續上次科目" : "開始第一個練習"}</button>
             <button className="student-secondary-action" onClick={() => document.getElementById("student-subjects")?.scrollIntoView({ behavior: "smooth" })}>查看全部科目</button>
+            {profile?.role === "student" && <button className="student-secondary-action" onClick={openStudentProgress}>學習進度</button>}
             {profile?.role === "admin" && <button className="admin-entry student-admin-entry" onClick={openAdminDashboard}><LayoutDashboard size={20} /><span><strong>管理員儀表板</strong><small>查看學習成績與進度</small></span></button>}
           </div>
         </div>
