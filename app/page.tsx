@@ -72,6 +72,13 @@ type StudentHomeStats = {
   lastUnitTitle: string | null;
   subjectCompleted: Record<string, number>;
 };
+// 《今日常識新領域》（第三版）分拆建議，第 1 頁。
+const p3GeneralStudiesGroups = [
+  { title: "人文科範疇", codes: new Set(["3H4", "3H5", "3H8", "3H9", "3H10", "3H11"]) },
+  { title: "科學科範疇", codes: new Set(["3H1", "3H2", "3H3", "3H6", "3H7"]) },
+  { title: "綜合常識", codes: null },
+];
+
 type AppView = "progress" | "subjects" | "parent" | "chinese" | "english" | "maths" | "generalStudies" | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
 type AuthMode = "login" | "register";
 type RegistrationRole = "student" | "parent";
@@ -1804,10 +1811,24 @@ export default function Home() {
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap general-studies-units">
       <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
-      <div className="units-heading"><div className="subject-icon amber"><Compass size={25} /></div><div><p className="eyebrow">P3 常識科</p><h1>選擇學習單元</h1><p>從健康、社會、科學與生活情境中探索知識，每次完成10題練習。</p></div></div>
+      <div className="units-heading"><div className="subject-icon amber"><Compass size={25} /></div><div><p className="eyebrow">P3 常識科</p><h1>選擇學習單元</h1><p>按人文、科學或綜合範疇選擇單元，每次完成10題練習。</p></div></div>
       {generalStudiesUnitsLoading && <div className="unit-status">正在載入常識科單元…</div>}
       {generalStudiesUnitsMessage && <div className="unit-status error-message">{generalStudiesUnitsMessage}</div>}
-      {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && <div className="unit-grid">{generalStudiesUnits.map((unit) => <button className="unit-card general-studies-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "generalStudies")}><span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2><p>{unit.title_en}</p><div><span>{unit.curriculum_domains?.title_zh || "常識科"}</span><span>開始練習</span></div></button>)}</div>}
+      {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && p3GeneralStudiesGroups.map(({ title, codes }) => {
+        const units = generalStudiesUnits.filter(unit => codes
+          ? codes.has(unit.code)
+          : !p3GeneralStudiesGroups.some(group => group.codes?.has(unit.code)));
+        if (!units.length) return null;
+        return <section className="general-studies-group" key={title}>
+          <h2>{title}</h2>
+          <div className="unit-grid">{units.map(unit => (
+            <button className="unit-card general-studies-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "generalStudies")}>
+              <span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2><p>{unit.title_en}</p>
+              <div><span>{unit.curriculum_domains?.title_zh || "常識科"}</span><span>開始練習</span></div>
+            </button>
+          ))}</div>
+        </section>;
+      })}
       {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && generalStudiesUnits.length === 0 && <div className="unit-status">目前尚未建立常識科單元。</div>}
     </section>
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>

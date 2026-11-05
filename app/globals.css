@@ -1744,3 +1744,6 @@ button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-
 .practice-flow-v2 .question-card:has(.question-topic-card)>.submit-answer,
 .practice-flow-v2 .question-card:has(.question-topic-card)>.feedback{grid-column:2;grid-row:5}
 }
+
+.general-studies-group + .general-studies-group { margin-top: 24px; }
+.general-studies-group > h2 { font-size: 1.1rem; margin: 0 0 12px; }
