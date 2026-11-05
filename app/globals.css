@@ -1745,5 +1745,9 @@ button,.account button,.back-button,.submit-answer,.next-question,.quality-edit-
 .practice-flow-v2 .question-card:has(.question-topic-card)>.feedback{grid-column:2;grid-row:5}
 }
 
-.general-studies-group + .general-studies-group { margin-top: 24px; }
-.general-studies-group > h2 { font-size: 1.1rem; margin: 0 0 12px; }
+.student-home-v2 .student-subject-card.science{--student-accent:#237d85;--student-soft:#e4f6f7}
+.learning-flow-v2.subject-humanities{--flow-accent:#38866a;--flow-accent-deep:#246a50;--flow-soft:#e7f7f0;--flow-glow:rgba(56,134,106,.16)}
+.learning-flow-v2.subject-science{--flow-accent:#237d85;--flow-accent-deep:#195f65;--flow-soft:#e4f6f7;--flow-glow:rgba(35,125,133,.16)}
+@media(min-width:1000px){
+  .student-home-v2 .student-subject-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+}

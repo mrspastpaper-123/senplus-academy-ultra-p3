@@ -24,10 +24,23 @@ export function summariseProgress(rows: ProgressAttempt[]) {
 }
 
 // Subject labels are supplied by the grade's existing home page.
+const p3HumanitiesUnits = new Set(["3H4", "3H5", "3H8", "3H9", "3H10", "3H11"]);
+const p3ScienceUnits = new Set(["3H1", "3H2", "3H3", "3H6", "3H7"]);
+
+export function p3GeneralStudiesSubject(code: string) {
+  if (p3HumanitiesUnits.has(code)) return "humanities";
+  if (p3ScienceUnits.has(code)) return "science";
+  return "generalStudies";
+}
+
 export function progressSubjectIndex(code: string, subjectCount: number): number {
   if (/^\d+(?:CL|CR|CW)/i.test(code)) return 0;
   if (/^\d+E/i.test(code)) return 1;
-  if (/^\d+SC/i.test(code)) return subjectCount === 5 ? 4 : 3;
+  if (subjectCount === 6 && /^3H/i.test(code)) {
+    const subject = p3GeneralStudiesSubject(code.toUpperCase());
+    return subject === "humanities" ? 4 : subject === "science" ? 5 : 3;
+  }
+  if (/^\d+SC/i.test(code)) return subjectCount === 6 ? 5 : subjectCount === 5 ? 4 : 3;
   if (/^\d+(?:N|M|S|D|A)/i.test(code)) return 2;
   if (/^\d+(?:GS|H|PS|LS)/i.test(code)) return 3;
   return -1;
