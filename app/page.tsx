@@ -9,6 +9,37 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createClient, Session } from "@supabase/supabase-js";
 import { AlertTriangle, ArrowLeft, BarChart3, BookOpen, Brain, CheckCircle2, Clock3, Compass, FlaskConical, KeyRound, Languages, LayoutDashboard, Lightbulb, Link2, LogOut, MessageSquareText, Pencil, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Smartphone, Target, Trophy, UserCheck, UserCog, UserPlus, Users, X } from "lucide-react";
 
+const generalStudiesBooks: ReadonlyArray<{
+  code: string;
+  title: string;
+  units: ReadonlyArray<{ title: string; lessons: ReadonlyArray<{ title: string; practiceCode: string | null }> }>;
+}> = [
+  { code: "3.1", title: "健康的生活", units: [
+    { title: "活得安康", lessons: [{ title: "藥到病除", practiceCode: "3GS01" }, { title: "遠離煙酒和毒品", practiceCode: "3GS01" }] },
+    { title: "身心健康", lessons: [{ title: "我的情緒", practiceCode: "3GS02" }, { title: "我的好朋友", practiceCode: "3GS02" }] },
+  ] },
+  { code: "3.2", title: "香港的動植物", units: [
+    { title: "動物樂園", lessons: [{ title: "香港的動物", practiceCode: "3GS03" }, { title: "動物與生活", practiceCode: "3GS03" }] },
+    { title: "植物萬花筒", lessons: [{ title: "香港的植物", practiceCode: "3GS04" }, { title: "植物與生活", practiceCode: "3GS04" }] },
+  ] },
+  { code: "3.3", title: "自然現象探趣", units: [
+    { title: "冷和熱", lessons: [{ title: "熱和温度的量度", practiceCode: "3H1" }, { title: "熱的傳遞和冷縮熱脹", practiceCode: "3H2" }] },
+    { title: "變幻的天氣", lessons: [{ title: "天氣與我", practiceCode: "3GS06" }, { title: "四季的變化", practiceCode: "3H3" }] },
+  ] },
+  { code: "3.4", title: "生活多姿彩", units: [
+    { title: "便利的生活", lessons: [{ title: "購物要精明", practiceCode: "3GS07" }, { title: "交通真方便", practiceCode: "3GS07" }] },
+    { title: "旅遊好去處", lessons: [{ title: "香港樂悠遊", practiceCode: "3GS08" }, { title: "中國萬里行", practiceCode: "3GS08" }, { title: "環遊大世界", practiceCode: "3GS08" }] },
+  ] },
+  { code: "3.5", title: "同一天空下", units: [
+    { title: "安居樂", lessons: [{ title: "住在香港", practiceCode: "3H4" }, { title: "居住好環境", practiceCode: "3H5" }] },
+    { title: "珍惜資源", lessons: [{ title: "節約能源", practiceCode: "3H6" }, { title: "減少廢物", practiceCode: "3H7" }] },
+  ] },
+  { code: "3.6", title: "香港知多少", units: [
+    { title: "香港是我家", lessons: [{ title: "香港特別行政區的成立", practiceCode: "3H8" }, { title: "自由與守規", practiceCode: "3H9" }] },
+    { title: "多元文化的社會", lessons: [{ title: "和諧共處", practiceCode: "3H10" }, { title: "文化交融", practiceCode: "3H11" }] },
+  ] },
+];
+
 const subjects = [
   { view: "chinese", name: "中文", note: "閱讀、語文與寫作", icon: BookOpen, colour: "coral" },
   { view: "english", name: "英文", note: "Reading, grammar & writing", icon: Languages, colour: "blue" },
@@ -1808,7 +1839,43 @@ export default function Home() {
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
 
-  if (view === "generalStudies" || view === "humanities" || view === "science") {
+  if (view === "generalStudies") {
+    const units = generalStudiesUnits;
+    const practicesByCode = new Map(units.map(unit => [unit.code, unit]));
+    return <main className="dashboard-page learning-flow-v2 subject-generalStudies"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
+    <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
+    <section className="dashboard-wrap units-wrap general-studies-units">
+      <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
+      <div className="units-heading"><div className="subject-icon amber"><Compass size={25} /></div><div><p className="eyebrow">P3 常識科</p><h1>選擇學習單元</h1><p>按冊次選擇常識科課題，每次完成10題練習。</p></div></div>
+      <div className="mb-8 flex flex-col gap-8">
+        {generalStudiesBooks.map(book => <section key={book.code} aria-labelledby={`gs-book-${book.code}`}>
+          <h2 id={`gs-book-${book.code}`} className="mb-4 text-2xl font-bold">{book.code} {book.title}</h2>
+          {book.units.map(group => <section key={group.title} className="mb-6 last:mb-0" aria-label={group.title}>
+            <h3 className="mb-3 text-xl font-bold">{group.title}</h3>
+            <div className="unit-grid">
+              {group.lessons.map(lesson => {
+                const practice = lesson.practiceCode ? practicesByCode.get(lesson.practiceCode) : undefined;
+                const action = practice ? "開始練習" : generalStudiesUnitsLoading && lesson.practiceCode ? "正在載入練習…" : "暫未有相關練習";
+                return <button className={`unit-card general-studies-unit-card ${practice ? "enabled" : ""}`} key={lesson.title} type="button" disabled={!practice} onClick={() => practice && startUnit(practice, "generalStudies")}>
+                  {lesson.practiceCode && <span className="unit-code">{lesson.practiceCode}</span>}
+                  <h2>{lesson.title}</h2>
+                  {practice && <p>{practice.title_zh}</p>}
+                  <div><span>常識科</span><span>{action}</span></div>
+                </button>;
+              })}
+            </div>
+          </section>)}
+        </section>)}
+      </div>
+      {generalStudiesUnitsLoading && <div className="unit-status">正在載入常識科單元…</div>}
+      {generalStudiesUnitsMessage && <div className="unit-status error-message">{generalStudiesUnitsMessage}</div>}
+      {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && units.length === 0 && <div className="unit-status">目前尚未建立常識科單元。</div>}
+    </section>
+    <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
+  </main>;
+  }
+
+  if (view === "humanities" || view === "science") {
     const subject = subjects.find(subject => subject.view === view)!;
     const units = generalStudiesUnits.filter(unit => p3GeneralStudiesSubject(unit.code) === view);
     const Icon = subject.icon;
