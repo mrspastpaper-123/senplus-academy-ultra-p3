@@ -333,6 +333,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<AppView>("subjects");
+  const [focusSubjectList, setFocusSubjectList] = useState(false);
   const [chineseUnits, setChineseUnits] = useState<MathsUnit[]>([]);
   const [chineseUnitsLoading, setChineseUnitsLoading] = useState(false);
   const [chineseUnitsMessage, setChineseUnitsMessage] = useState("");
@@ -723,6 +724,20 @@ export default function Home() {
       setRegistrationMessage("帳戶已建立。請先到電郵信箱按確認連結；完成後仍需等待管理員批准。");
     }
     setRegistrationLoading(false);
+  }
+
+  useEffect(() => {
+    if (view !== "subjects" || !focusSubjectList) return;
+
+    const heading = document.getElementById("student-subjects");
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView({ block: "start" });
+    setFocusSubjectList(false);
+  }, [view, focusSubjectList]);
+
+  function showAllSubjects() {
+    setFocusSubjectList(true);
+    setView("subjects");
   }
 
   function openStudentProgress() {
@@ -1699,7 +1714,7 @@ export default function Home() {
   if (view === "maths") return <main className="dashboard-page learning-flow-v2 subject-maths"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap">
-      <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
+      <button className="back-button" onClick={showAllSubjects}><ArrowLeft size={18} />查看全部科目</button>
       <div className="units-heading"><div className="subject-icon purple"><Brain size={25} /></div><div><p className="eyebrow">P3 數學</p><h1>選擇學習單位</h1><p>按自己的步伐逐步練習，完成後會即時批改。</p></div></div>
       {unitsLoading && <div className="unit-status">正在載入12個數學單位…</div>}
       {unitsMessage && <div className="unit-status error-message">{unitsMessage}</div>}
@@ -1712,7 +1727,7 @@ export default function Home() {
   if (view === "english") return <main className="dashboard-page learning-flow-v2 subject-english"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap english-units">
-      <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
+      <button className="back-button" onClick={showAllSubjects}><ArrowLeft size={18} />查看全部科目</button>
       <div className="units-heading"><div className="subject-icon blue"><Languages size={25} /></div><div><p className="eyebrow">P3 English</p><h1>Choose a learning unit</h1><p>Complete a 10-question practice. Answers, explanations and mistakes will be recorded automatically.</p></div></div>
       {englishUnitsLoading && <div className="unit-status">Loading English units…</div>}
       {englishUnitsMessage && <div className="unit-status error-message">{englishUnitsMessage}</div>}
@@ -1725,7 +1740,7 @@ export default function Home() {
   if (view === "chinese") return <main className="dashboard-page learning-flow-v2 subject-chinese"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap chinese-units">
-      <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
+      <button className="back-button" onClick={showAllSubjects}><ArrowLeft size={18} />查看全部科目</button>
       <div className="units-heading"><div className="subject-icon coral"><BookOpen size={25} /></div><div><p className="eyebrow">P3 中文</p><h1>選擇學習單位</h1><p>選擇單位完成10題練習，系統會即時批改並記錄錯題。</p></div></div>
       {chineseUnitsLoading && <div className="unit-status">正在載入20個中文單位…</div>}
       {chineseUnitsMessage && <div className="unit-status error-message">{chineseUnitsMessage}</div>}
@@ -1741,7 +1756,7 @@ export default function Home() {
     return <main className="dashboard-page learning-flow-v2 subject-generalStudies"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap general-studies-units">
-      <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
+      <button className="back-button" onClick={showAllSubjects}><ArrowLeft size={18} />查看全部科目</button>
       <div className="units-heading"><div className="subject-icon amber"><Compass size={25} /></div><div><p className="eyebrow">P3 常識科</p><h1>選擇學習單元</h1><p>按冊次選擇常識科課題，每次完成10題練習。</p></div></div>
       <div className="mb-8 flex flex-col gap-8">
         {generalStudiesBooks.map(book => <section key={book.code} aria-labelledby={`gs-book-${book.code}`}>
@@ -1778,7 +1793,7 @@ export default function Home() {
     return <main className={`dashboard-page learning-flow-v2 subject-${view}`}><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap general-studies-units">
-      <button className="back-button" onClick={() => setView("subjects")}><ArrowLeft size={18} />返回科目</button>
+      <button className="back-button" onClick={showAllSubjects}><ArrowLeft size={18} />查看全部科目</button>
       <div className="units-heading"><div className={`subject-icon ${subject.colour}`}><Icon size={25} /></div><div><p className="eyebrow">P3 {subject.name}</p><h1>選擇學習單元</h1><p>{subject.note}，每次完成10題練習。</p></div></div>
       {generalStudiesUnitsLoading && <div className="unit-status">正在載入{subject.name}單元…</div>}
       {generalStudiesUnitsMessage && <div className="unit-status error-message">{generalStudiesUnitsMessage}</div>}
@@ -1857,7 +1872,7 @@ export default function Home() {
         <article><span className="student-stat-icon coral">♨</span><div><small>連續學習</small><strong>{studentHomeStats.streak} 天</strong></div></article>
       </section>
 
-      <section className="student-subject-heading" id="student-subjects">
+      <section className="student-subject-heading" id="student-subjects" tabIndex={-1}>
         <div><span>選擇科目</span><h2>今天想探索甚麼？</h2></div>
         <p>所有完成紀錄會自動儲存</p>
       </section>
