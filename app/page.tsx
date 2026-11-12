@@ -40,6 +40,38 @@ const generalStudiesBooks: ReadonlyArray<{
   ] },
 ];
 
+const subjectPracticeTopics = {
+  humanities: [
+    ["3GS02", "我的情緒"],
+    ["3GS02", "我的好朋友"],
+    ["3GS07", "購物要精明"],
+    ["3GS07", "交通真方便"],
+    ["3GS08", "香港樂悠遊"],
+    ["3GS08", "中國萬里行"],
+    ["3GS08", "環遊大世界"],
+    ["3H4", "住在香港"],
+    ["3H5", "居住好環境"],
+    ["3H8", "香港特別行政區的成立"],
+    ["3H9", "自由與守規"],
+    ["3H10", "和諧共處"],
+    ["3H11", "文化交融"],
+  ],
+  science: [
+    ["3GS01", "藥到病除"],
+    ["3GS01", "遠離煙酒和毒品"],
+    ["3GS03", "香港的動物"],
+    ["3GS03", "動物與生活"],
+    ["3GS04", "香港的植物"],
+    ["3GS04", "植物與生活"],
+    ["3H1", "熱和温度的量度"],
+    ["3H2", "熱的傳遞和冷縮熱脹"],
+    ["3GS06", "天氣與我"],
+    ["3H3", "四季的變化"],
+    ["3H6", "節約能源"],
+    ["3H7", "減少廢物"],
+  ],
+} as const;
+
 const subjects = [
   { view: "chinese", name: "中文", note: "閱讀、語文與寫作", icon: BookOpen, colour: "coral" },
   { view: "english", name: "英文", note: "Reading, grammar & writing", icon: Languages, colour: "blue" },
@@ -1788,7 +1820,7 @@ export default function Home() {
 
   if (view === "humanities" || view === "science") {
     const subject = subjects.find(subject => subject.view === view)!;
-    const units = generalStudiesUnits.filter(unit => p3GeneralStudiesSubject(unit.code) === view);
+    const practicesByCode = new Map(generalStudiesUnits.map(unit => [unit.code, unit]));
     const Icon = subject.icon;
     return <main className={`dashboard-page learning-flow-v2 subject-${view}`}><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
@@ -1797,13 +1829,19 @@ export default function Home() {
       <div className="units-heading"><div className={`subject-icon ${subject.colour}`}><Icon size={25} /></div><div><p className="eyebrow">P3 {subject.name}</p><h1>選擇學習單元</h1><p>{subject.note}，每次完成10題練習。</p></div></div>
       {generalStudiesUnitsLoading && <div className="unit-status">正在載入{subject.name}單元…</div>}
       {generalStudiesUnitsMessage && <div className="unit-status error-message">{generalStudiesUnitsMessage}</div>}
-      {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && <div className="unit-grid">{units.map(unit => (
-        <button className="unit-card general-studies-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, view)}>
-          <span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2><p>{unit.title_en}</p>
-          <div><span>{subject.name}</span><span>開始練習</span></div>
-        </button>
-      ))}</div>}
-      {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && units.length === 0 && <div className="unit-status">目前尚未建立{subject.name}單元。</div>}
+      {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && <div className="unit-grid">
+        {subjectPracticeTopics[view].map(([code, title]) => {
+          const unit = practicesByCode.get(code);
+          return <button className={`unit-card general-studies-unit-card ${unit ? "enabled" : ""}`}
+            key={title} type="button" disabled={!unit}
+            onClick={() => unit && startUnit({ ...unit, title_zh: title }, view)}>
+            <span className="unit-code">{code}</span>
+            <h2>{title}</h2>
+            {unit && <p>{title === unit.title_zh ? unit.title_en : `對應題庫 · ${unit.title_zh}`}</p>}
+            <div><span>{subject.name}</span><span>{unit ? "開始練習" : "練習暫未能開啟"}</span></div>
+          </button>;
+        })}
+      </div>}
     </section>
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
