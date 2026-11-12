@@ -1820,7 +1820,6 @@ export default function Home() {
       <div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra</span></div></div>
       <nav className="student-home-nav" aria-label="學生主選單">
         <button className="active" onClick={() => setView("subjects")}>我的學習</button>
-        <button onClick={() => document.getElementById("student-subjects")?.scrollIntoView({ behavior: "smooth" })}>全部科目</button>
         {profile?.role === "student" && <button onClick={openStudentProgress}>學習進度</button>}
       </nav>
       <div className="account student-home-account">
@@ -1839,7 +1838,6 @@ export default function Home() {
           <p>每天完成一小步，知識星球就會亮起更多星光。</p>
           <div className="student-home-actions">
             <button className="student-primary-action" onClick={continueHomeLearning}><span>▶</span>{studentHomeStats.lastSubject ? "繼續上次科目" : "開始第一個練習"}</button>
-            <button className="student-secondary-action" onClick={() => document.getElementById("student-subjects")?.scrollIntoView({ behavior: "smooth" })}>查看全部科目</button>
             {profile?.role === "student" && <button className="student-secondary-action" onClick={openStudentProgress}>學習進度</button>}
             {profile?.role === "admin" && <button className="admin-entry student-admin-entry" onClick={openAdminDashboard}><LayoutDashboard size={20} /><span><strong>管理員儀表板</strong><small>查看學習成績與進度</small></span></button>}
           </div>
