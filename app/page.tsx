@@ -7,7 +7,7 @@ import { cleanLearningText } from "./learning-text";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createClient, Session } from "@supabase/supabase-js";
-import { AlertTriangle, ArrowLeft, BarChart3, BookOpen, Brain, CheckCircle2, Clock3, Compass, FlaskConical, KeyRound, Languages, LayoutDashboard, Lightbulb, Link2, LogOut, MessageSquareText, Pencil, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Smartphone, Target, Trophy, UserCheck, UserCog, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BarChart3, BookOpen, Brain, CheckCircle2, Clock3, Compass, FlaskConical, KeyRound, Languages, LayoutDashboard, Lightbulb, LogOut, MessageSquareText, Pencil, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Smartphone, Target, Trophy, UserCheck, UserCog, UserPlus, Users, X } from "lucide-react";
 
 const generalStudiesBooks: ReadonlyArray<{
   code: string;
@@ -54,7 +54,7 @@ type GeneralStudiesView = ReturnType<typeof p3GeneralStudiesSubject>;
 
 const enabledMathsUnits = new Set(["3N1", "3N2", "3N3", "3N4", "3N5", "3M1", "3M2", "3M3", "3M4", "3M5", "3S1", "3S2", "3D1"]);
 
-type Profile = { display_name: string | null; role: string; grade: string | null; login_allowed: boolean; approved_at?: string | null };
+type Profile = { id: string; display_name: string | null; role: string; grade: string | null; login_allowed: boolean; approved_at?: string | null };
 type MathsUnit = { id: number; domain_id: number; code: string; title_zh: string; title_en: string | null; difficulty: number; curriculum_domains: { title_zh: string; code: string } | null };
 type PracticeQuestion = { id: number; question_text: string; options: { id: string; text: string }[] };
 type WritingPrompt = { prompt_id: number; genre: string; title: string; instruction: string; min_chars: number; max_chars: number; guidance: string[] };
@@ -69,13 +69,13 @@ function adminAccountStatus(account: ManagedStudent) {
   return account.pending_status || (account.login_allowed ? "approved" : account.approved_at ? "suspended" : "pending");
 }
 function isManagedSchoolAccount(account: ManagedStudent) {
-  return account.role === "parent" || (account.role === "student" && ADMIN_ACCOUNT_GRADES.some((grade) => grade === account.grade));
+  return account.role === "student" && ADMIN_ACCOUNT_GRADES.some((grade) => grade === account.grade);
 }
 function filterAdminAccounts(accounts: ManagedStudent[], search: string, grade: string, status: string) {
   const query = search.trim().toLowerCase();
   return accounts.filter((account) => isManagedSchoolAccount(account)
     && (!query || (account.display_name || "").toLowerCase().includes(query) || account.email.toLowerCase().includes(query))
-    && (grade === "all" || (grade === "parents" ? account.role === "parent" : account.role === "student" && account.grade === grade))
+    && (grade === "all" || account.grade === grade)
     && (status === "all" || adminAccountStatus(account) === status));
 }
 function selectedPendingAccounts(accounts: ManagedStudent[], selectedIds: string[]) {
@@ -87,12 +87,7 @@ type WrongResponse = { id: number; attempt_id: number; question_id: number; sele
 type WrongQuestion = { id: number; node_id: number; question_text: string; options: { id: string; text: string }[] };
 type WrongAnswerKey = { question_id: number; correct_answer: unknown; explanation: string | null; hint: string | null };
 type FeedbackReport = { id: number; user_id: string; category: string; subject: string; message: string; page_context: string | null; status: string; admin_note: string | null; created_at: string };
-type ParentAttempt = { id: number; node_code: string; title_zh: string; status: string; total_questions: number; answered_count: number; correct_count: number; score: number | null; started_at: string; completed_at: string | null };
 type SubjectPerformance = { subject: string; attempts: number; completed: number; average: number };
-type ParentChild = { student_id: string; display_name: string; grade: string; attempt_count: number; completed_count: number; average_score: number; wrong_count: number; last_active: string | null; subject_performance: SubjectPerformance[]; attempts: ParentAttempt[] };
-type ParentPending = { student_id: string; display_name: string; requested_at: string };
-type ParentRequest = { parent_id: string; display_name: string; status: "pending" | "approved"; requested_at: string; approved_at: string | null };
-type ParentError = { response_id: number; question_id: number; selected_answer: unknown; answered_at: string; node_code: string; title_zh: string; question_text: string; options: { id: string; text: string }[]; correct_answer: unknown; explanation: string | null; hint: string | null };
 type QualityIssue = { issue_type: string; severity: "error" | "warning"; question_id: number; node_code: string | null; question_text: string; details: string; options: { id: string; text: string }[] | null; correct_answer: string | null; explanation: string | null; hint: string | null };
 type QualitySummary = { total_questions: number; total_issues: number; affected_questions: number; error_count: number; warning_count: number };
 type QualityEditor = { questionId: number; questionText: string; optionA: string; optionB: string; optionC: string; optionD: string; correctAnswer: string; explanation: string; hint: string };
@@ -109,9 +104,8 @@ type StudentHomeStats = {
   lastUnitTitle: string | null;
   subjectCompleted: Record<string, number>;
 };
-type AppView = "progress" | "subjects" | "parent" | SubjectView | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
+type AppView = "progress" | "subjects" | SubjectView | "practice" | "complete" | "admin" | "students" | "studentDetail" | "studentErrors" | "quality" | "feedback" | "adminFeedback" | "privacy";
 type AuthMode = "login" | "register";
-type RegistrationRole = "student" | "parent";
 
 // These are browser-safe Supabase connection values. Database security remains
 // enforced by Supabase authentication and row-level security policies.
@@ -122,11 +116,6 @@ function answerValue(value: unknown) {
   if (typeof value === "string") return value;
   if (value && typeof value === "object" && "id" in value) return String((value as { id: unknown }).id);
   return value === null || value === undefined ? "—" : String(value);
-}
-
-function parentAnswerText(error: ParentError, value: unknown) {
-  const id = answerValue(value);
-  return cleanLearningText(error.options?.find((option) => option.id === id)?.text || id);
 }
 
 function localiseCurrency(value: string) {
@@ -272,7 +261,7 @@ function QuestionDataDiagramView({ text, unitCode }: { text: string; unitCode: s
 
 function TwinkoGuide({ view, answerCorrect }: { view: string; answerCorrect: boolean | null }) {
   const subjectViews = ["maths", "english", "chinese", "humanities", "science", "generalStudies"];
-  const quietViews = ["parent", "admin", "adminFeedback", "studentErrors", "studentDetail", "quality", "students", "feedback", "privacy", "status"];
+  const quietViews = ["admin", "adminFeedback", "studentErrors", "studentDetail", "quality", "students", "feedback", "privacy", "status"];
   const isCelebrating = view === "complete" || answerCorrect === true;
   const isThinking = view === "practice" && answerCorrect === null;
   const isReviewing = answerCorrect === false;
@@ -328,7 +317,6 @@ export default function Home() {
   const [resetRequestMessage, setResetRequestMessage] = useState("");
   const [resetRequestSuccess, setResetRequestSuccess] = useState(false);
   const [passwordRecoveryMode, setPasswordRecoveryMode] = useState(false);
-  const [registrationRole, setRegistrationRole] = useState<RegistrationRole>("student");
   const [registrationName, setRegistrationName] = useState("");
   const [registrationEmail, setRegistrationEmail] = useState("");
   const [registrationPassword, setRegistrationPassword] = useState("");
@@ -424,18 +412,6 @@ export default function Home() {
   const [reportLoading, setReportLoading] = useState(false);
   const [feedbackReports, setFeedbackReports] = useState<FeedbackReport[]>([]);
   const [feedbackListLoading, setFeedbackListLoading] = useState(false);
-  const [parentChildren, setParentChildren] = useState<ParentChild[]>([]);
-  const [parentPending, setParentPending] = useState<ParentPending[]>([]);
-  const [parentLoading, setParentLoading] = useState(false);
-  const [parentMessage, setParentMessage] = useState("");
-  const [parentInviteCode, setParentInviteCode] = useState("");
-  const [selectedParentChildId, setSelectedParentChildId] = useState<string | null>(null);
-  const [parentErrors, setParentErrors] = useState<ParentError[]>([]);
-  const [parentErrorsLoading, setParentErrorsLoading] = useState(false);
-  const [studentLinkCode, setStudentLinkCode] = useState("");
-  const [studentLinkExpiry, setStudentLinkExpiry] = useState<string | null>(null);
-  const [studentParentRequests, setStudentParentRequests] = useState<ParentRequest[]>([]);
-  const [familyLinkMessage, setFamilyLinkMessage] = useState("");
   const [studentHomeStats, setStudentHomeStats] = useState<StudentHomeStats>({
     completed: 0,
     answered: 0,
@@ -511,11 +487,21 @@ export default function Home() {
   }, [supabase]);
 
   useEffect(() => {
-    if (!session?.user || passwordRecoveryMode) return;
+    if (!session?.user) return;
     async function verifyAccess() {
-      const { data, error } = await supabase.from("profiles").select("display_name, role, grade, login_allowed, approved_at").eq("id", session!.user.id).single();
+      const { data, error } = await supabase.from("profiles").select("id, display_name, role, grade, login_allowed, approved_at").eq("id", session!.user.id).single();
       if (error) {
         setMessage("未能讀取用戶資料，請聯絡管理員。");
+        return;
+      }
+      if (data.role !== "student" && data.role !== "admin") {
+        setProfile(null);
+        await supabase.auth.signOut({ scope: "local" });
+        setMessage("家長帳戶服務已停止。請使用學生帳戶登入。");
+        return;
+      }
+      if (passwordRecoveryMode) {
+        setProfile(data);
         return;
       }
       if (data.role === "student" && data.grade !== "P3") {
@@ -548,59 +534,10 @@ export default function Home() {
   }, [session, supabase, passwordRecoveryMode]);
 
   useEffect(() => {
-    if (profile?.role === "parent") {
-      setView("parent");
-      loadParentDashboard();
-    } else if (profile?.role === "student") {
-      loadStudentParentRequests();
+    if (profile?.role === "student") {
       loadStudentHomeStats();
     }
   }, [profile, view === "subjects"]);
-
-  async function loadParentDashboard() {
-    setParentLoading(true); setParentMessage("");
-    const { data, error } = await supabase.rpc("parent_get_dashboard");
-    if (error || !data?.success) {
-      setParentMessage("未能載入家長儀表板。請先確認已執行家長功能設定 SQL。");
-    } else {
-      const children = ((data.children || []) as ParentChild[]).filter((child) => child.grade === "P3");
-      setParentChildren(children);
-      setParentPending((data.pending_requests || []) as ParentPending[]);
-      setSelectedParentChildId((current) => current && children.some((child) => child.student_id === current) ? current : children[0]?.student_id || null);
-    }
-    setParentLoading(false);
-  }
-
-  async function linkStudentToParent(event: FormEvent) {
-    event.preventDefault(); setParentMessage("");
-    const code = parentInviteCode.trim().toUpperCase();
-    if (!/^[A-Z0-9]{6}$/.test(code)) { setParentMessage("請輸入學生提供的6位邀請碼。"); return; }
-    setParentLoading(true);
-    const { data, error } = await supabase.rpc("parent_link_student", { p_code: code });
-    if (error || !data?.success) setParentMessage(data?.message || "邀請碼無效或已過期，請學生重新產生。");
-    else {
-      setParentInviteCode("");
-      setParentMessage(`已向${data.display_name || "學生"}送出連結申請，等待學生確認。`);
-      await loadParentDashboard();
-    }
-    setParentLoading(false);
-  }
-
-  async function unlinkParentChild(child: ParentChild) {
-    if (!window.confirm(`確定解除與${child.display_name}的連結嗎？`)) return;
-    setParentLoading(true); setParentMessage("");
-    const { error } = await supabase.rpc("parent_unlink_student", { p_student_id: child.student_id });
-    if (error) setParentMessage("未能解除連結，請稍後再試。"); else await loadParentDashboard();
-    setParentLoading(false);
-  }
-
-  async function loadParentErrors(studentId: string) {
-    setSelectedParentChildId(studentId); setParentErrorsLoading(true); setParentErrors([]); setParentMessage("");
-    const { data, error } = await supabase.rpc("parent_get_child_errors", { p_student_id: studentId });
-    if (error || !data?.success) setParentMessage("未能載入錯題，請稍後再試。");
-    else setParentErrors((data.errors || []) as ParentError[]);
-    setParentErrorsLoading(false);
-  }
 
   async function loadStudentHomeStats() {
     if (!session?.user) return;
@@ -667,25 +604,6 @@ export default function Home() {
       lastUnitTitle: lastNode?.title_zh || null,
       subjectCompleted,
     });
-  }
-
-  async function createStudentParentCode() {
-    setFamilyLinkMessage("");
-    const { data, error } = await supabase.rpc("create_parent_link_code");
-    if (error || !data?.success) setFamilyLinkMessage("暫時未能產生邀請碼，請稍後再試。");
-    else { setStudentLinkCode(data.code); setStudentLinkExpiry(data.expires_at); setFamilyLinkMessage("邀請碼已產生，請只交給你的家長或監護人。"); }
-  }
-
-  async function loadStudentParentRequests() {
-    const { data, error } = await supabase.rpc("student_get_parent_requests");
-    if (!error && data?.success) setStudentParentRequests((data.requests || []) as ParentRequest[]);
-  }
-
-  async function respondToParentRequest(parentId: string, approve: boolean) {
-    setFamilyLinkMessage("");
-    const { error } = await supabase.rpc("student_respond_parent_request", { p_parent_id: parentId, p_approve: approve });
-    if (error) setFamilyLinkMessage("未能處理連結申請，請稍後再試。");
-    else { setFamilyLinkMessage(approve ? "已批准家長連結。" : "已拒絕連結申請。"); await loadStudentParentRequests(); }
   }
 
   async function signIn(event: FormEvent) {
@@ -767,7 +685,7 @@ export default function Home() {
       return;
     }
     if (!registrationConsent) {
-      setRegistrationMessage(registrationRole === "student" ? "請確認已獲家長或監護人同意。" : "請確認你同意私隱聲明。");
+      setRegistrationMessage("請確認已獲家長或監護人同意。");
       return;
     }
     setRegistrationLoading(true);
@@ -778,8 +696,8 @@ export default function Home() {
         emailRedirectTo: window.location.origin,
         data: {
           display_name: cleanName,
-          requested_role: registrationRole,
-          grade: registrationRole === "student" ? "P3" : null,
+          requested_role: "student",
+          grade: "P3",
           signup_source: "self_service",
         },
       },
@@ -1361,11 +1279,18 @@ export default function Home() {
         <section><h2>收集的資料</h2><p>平台會保存帳戶姓名、電郵、年級、登入裝置記錄、練習答案與成績，以及你主動提交的問題回報。</p></section>
         <section><h2>使用目的</h2><p>資料只用於帳戶登入、安全管理、提供學習練習、整理學習成績及處理意見。</p></section>
         <section className="policy-warning"><h2>請勿輸入敏感資料</h2><p>請不要提交住址、電話、身份證或護照號碼、健康資料、銀行或付款資料。問題回報只需描述平台問題。</p></section>
-        <section><h2>查閱與保安</h2><p>學生只可查看自己的學習內容；家長帳戶日後只可查看已連結子女的資料；獲授權管理員可查看帳戶、成績及回報，以管理平台。請勿與他人分享密碼。</p></section>
+        <section><h2>查閱與保安</h2><p>學生登入後可查看自己的成績、學習進度和練習紀錄。獲授權管理員可查看帳戶、成績及回報，以管理平台。請勿與他人分享密碼。</p></section>
         <section><h2>保存、更正與刪除</h2><p>如需更正或刪除試用資料，請聯絡 SENPlus+ 管理員。試用完結後，管理員可按需要刪除測試帳戶及相關記錄。</p></section>
         <section><h2>服務供應</h2><p>平台使用 Supabase 及網站託管服務處理必要資料。我們不會出售學生資料。</p></section>
       </div>
     </section></main>
+  );
+
+  if (session && profile?.id !== session.user.id) return (
+    <main className="status-page"><div className="status-card">
+      <h1>{message || "正在確認帳戶…"}</h1>
+      {message && <button onClick={signOut}>返回登入</button>}
+    </div></main>
   );
 
   if (passwordRecoveryMode && session) return (
@@ -1401,7 +1326,7 @@ export default function Home() {
           <button type="button" role="tab" aria-selected={authMode === "register"} className={authMode === "register" ? "active" : ""} onClick={() => { setAuthMode("register"); setForgotPasswordMode(false); setRegistrationMessage(""); }}>建立帳戶</button>
         </div>
         {authMode === "login" && forgotPasswordMode ? <form onSubmit={requestPasswordReset}>
-          <p className="eyebrow">帳戶安全</p><h2>忘記密碼</h2><p className="form-note">輸入學生或家長帳戶的電郵，我們會發送安全重設連結。</p>
+          <p className="eyebrow">帳戶安全</p><h2>忘記密碼</h2><p className="form-note">輸入學生帳戶的電郵，我們會發送安全重設連結。</p>
           <label>電郵地址<input type="email" required autoComplete="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} placeholder="name@example.com" /></label>
           {resetRequestMessage && <p className={resetRequestSuccess ? "registration-success" : "error-message"}>{resetRequestMessage}</p>}
           <button type="submit" disabled={resetRequestLoading}>{resetRequestLoading ? "正在發送…" : "發送重設密碼電郵"}</button>
@@ -1413,20 +1338,16 @@ export default function Home() {
           {message && <p className="error-message">{message}</p>}
           <button type="submit" disabled={loading}>{loading ? "登入中…" : "登入學習平台"}</button>
           <p className="forgot-password-link"><button type="button" onClick={() => { setResetEmail(email); setForgotPasswordMode(true); setResetRequestMessage(""); }}>忘記密碼？</button></p>
-          <p className="privacy-note">還沒有帳戶？<button type="button" onClick={() => setAuthMode("register")}>學生或家長可自行建立</button><br /><button type="button" onClick={() => setView("privacy")}>查看私隱聲明</button></p>
+          <p className="privacy-note">還沒有帳戶？<button type="button" onClick={() => setAuthMode("register")}>建立學生帳戶</button><br /><button type="button" onClick={() => setView("privacy")}>查看私隱聲明</button></p>
         </form> : <form onSubmit={registerAccount}>
-          <p className="eyebrow">P3 學習平台</p><h2>建立帳戶</h2><p className="form-note">選擇身分並填寫基本資料。</p>
-          <fieldset className="role-choice"><legend>帳戶身分</legend>
-            <label className={registrationRole === "student" ? "selected" : ""}><input type="radio" name="registration-role" value="student" checked={registrationRole === "student"} onChange={() => { setRegistrationRole("student"); setRegistrationConsent(false); }} /><span><strong>學生</strong><small>P3 練習及成績紀錄</small></span></label>
-            <label className={registrationRole === "parent" ? "selected" : ""}><input type="radio" name="registration-role" value="parent" checked={registrationRole === "parent"} onChange={() => { setRegistrationRole("parent"); setRegistrationConsent(false); }} /><span><strong>家長</strong><small>家長帳戶</small></span></label>
-          </fieldset>
-          <label>姓名<input type="text" required minLength={2} maxLength={60} autoComplete="name" value={registrationName} onChange={(e) => setRegistrationName(e.target.value)} placeholder={registrationRole === "student" ? "學生姓名" : "家長姓名"} /></label>
+          <p className="eyebrow">P3 學習平台</p><h2>建立帳戶</h2><p className="form-note">填寫學生的基本資料。</p>
+          <label>姓名<input type="text" required minLength={2} maxLength={60} autoComplete="name" value={registrationName} onChange={(e) => setRegistrationName(e.target.value)} placeholder="學生姓名" /></label>
           <label>電郵地址<input type="email" required autoComplete="email" value={registrationEmail} onChange={(e) => setRegistrationEmail(e.target.value)} placeholder="name@example.com" /></label>
           <label>密碼<input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={registrationPassword} onChange={(e) => setRegistrationPassword(e.target.value)} placeholder="8至72個字元" /></label>
           <label>確認密碼<input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={registrationPasswordConfirm} onChange={(e) => setRegistrationPasswordConfirm(e.target.value)} placeholder="再次輸入密碼" /></label>
-          <label className="consent-check"><input type="checkbox" checked={registrationConsent} onChange={(e) => setRegistrationConsent(e.target.checked)} /><span>{registrationRole === "student" ? "我已獲家長或監護人同意建立帳戶，並同意" : "我同意"} <button type="button" onClick={() => setView("privacy")}>私隱聲明</button>。</span></label>
+          <label className="consent-check"><input type="checkbox" checked={registrationConsent} onChange={(e) => setRegistrationConsent(e.target.checked)} /><span>我已獲家長或監護人同意建立帳戶，並同意 <button type="button" onClick={() => setView("privacy")}>私隱聲明</button>。</span></label>
           {registrationMessage && <p className={registrationSuccess ? "registration-success" : "error-message"}>{registrationMessage}</p>}
-          <button type="submit" disabled={registrationLoading}>{registrationLoading ? "建立中…" : <><UserPlus size={17} />建立{registrationRole === "student" ? "學生" : "家長"}帳戶</>}</button>
+          <button type="submit" disabled={registrationLoading}>{registrationLoading ? "建立中…" : <><UserPlus size={17} />建立學生帳戶</>}</button>
           <p className="privacy-note">已經有帳戶？<button type="button" onClick={() => setAuthMode("login")}>返回登入</button></p>
         </form>}
       </div></section>
@@ -1460,31 +1381,6 @@ export default function Home() {
       subjects={subjects.map(subject => subject.name)} onBack={() => { setView("subjects"); window.scrollTo({ top: 0 }); }}
       onSignOut={() => void signOut()} onPractice={index => { window.scrollTo({ top: 0 }); const subject = subjects[index]; if (subject) void openSubject(subject.view); }} />
   );
-
-  if (view === "parent" && profile?.role === "parent") {
-    const selectedChild = parentChildren.find((child) => child.student_id === selectedParentChildId) || parentChildren[0];
-    const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat("zh-HK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "尚未開始";
-    return <main className="dashboard-page parent-dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
-      <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>家長學習儀表板</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
-      <section className="dashboard-wrap parent-wrap">
-        <div className="parent-heading"><div><p className="eyebrow">家長專區</p><h1>子女學習概覽</h1><p>只顯示已由學生親自確認的連結及學習紀錄。</p></div><button onClick={loadParentDashboard} disabled={parentLoading}><RefreshCw size={17} />{parentLoading ? "更新中…" : "更新資料"}</button></div>
-        <section className="parent-link-panel"><div className="parent-link-copy"><div className="parent-link-icon"><Link2 size={25} /></div><div><h2>連結另一位子女</h2><p>請學生登入後產生6位邀請碼。提交後仍須由學生確認，家長才可查看資料。</p></div></div><form onSubmit={linkStudentToParent}><input aria-label="6位邀請碼" maxLength={6} value={parentInviteCode} onChange={(event) => setParentInviteCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder="例如 AB23CD" /><button type="submit" disabled={parentLoading}><UserPlus size={17} />送出連結申請</button></form></section>
-        {parentMessage && <div className={parentMessage.startsWith("已") ? "parent-notice success" : "parent-notice"}>{parentMessage}</div>}
-        {parentPending.length > 0 && <section className="pending-links"><div><Clock3 size={20} /><div><strong>等待學生確認</strong><p>{parentPending.map((item) => item.display_name).join("、")}尚未批准連結。</p></div></div></section>}
-        {parentLoading && !parentChildren.length ? <div className="unit-status">正在整理子女學習紀錄…</div> : parentChildren.length === 0 ? <section className="parent-empty"><UserCheck size={34} /><h2>尚未連結子女</h2><p>請子女登入學生帳戶產生邀請碼，再於上方提交連結申請。</p></section> : <>
-          <div className="child-tabs" role="tablist" aria-label="選擇子女">{parentChildren.map((child) => <button role="tab" aria-selected={selectedChild?.student_id === child.student_id} className={selectedChild?.student_id === child.student_id ? "active" : ""} key={child.student_id} onClick={() => { setSelectedParentChildId(child.student_id); setParentErrors([]); }}><strong>{child.display_name}</strong><span>{child.grade}</span></button>)}</div>
-          {selectedChild && <>
-            <section className="parent-child-hero"><div><p className="eyebrow">已確認連結</p><h2>{selectedChild.display_name}</h2><p>最近學習：{formatDate(selectedChild.last_active)}</p></div><button onClick={() => unlinkParentChild(selectedChild)}>解除連結</button></section>
-            <div className="metric-grid parent-metrics"><article><div className="metric-icon teal"><BarChart3 size={22} /></div><span>練習總次數</span><strong>{selectedChild.attempt_count}</strong><small>{selectedChild.completed_count}次已完成</small></article><article><div className="metric-icon purple"><Target size={22} /></div><span>平均分</span><strong>{Math.round(Number(selectedChild.average_score || 0))}<b>分</b></strong><small>已完成練習平均</small></article><article><div className="metric-icon green"><CheckCircle2 size={22} /></div><span>完成率</span><strong>{selectedChild.attempt_count ? Math.round((selectedChild.completed_count / selectedChild.attempt_count) * 100) : 0}<b>%</b></strong><small>完成／已開始</small></article><article><div className="metric-icon amber"><AlertTriangle size={22} /></div><span>錯誤作答</span><strong>{selectedChild.wrong_count}</strong><button className="metric-link" onClick={() => loadParentErrors(selectedChild.student_id)}>查看錯題</button></article></div>
-            <div className="parent-panels"><section className="admin-panel"><div className="panel-title"><div><p className="eyebrow">五科表現</p><h2>各科平均分</h2></div><span>{selectedChild.subject_performance?.length || 0}科</span></div>{selectedChild.subject_performance?.length ? <div className="unit-performance">{selectedChild.subject_performance.map((row) => <div key={row.subject}><div><strong>{row.subject}</strong><span>{row.attempts}次練習 · {row.completed}次完成 · 平均{Math.round(Number(row.average))}分</span></div><div className="performance-track"><span style={{ width: `${Math.round(Number(row.average))}%` }} /></div></div>)}</div> : <p className="empty-admin">尚未有科目成績。</p>}</section>
-            <section className="admin-panel recent-panel"><div className="panel-title"><div><p className="eyebrow">最新動態</p><h2>最近練習</h2></div><span>最近10項</span></div>{selectedChild.attempts?.length ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>單元</th><th>狀態</th><th>答對</th><th>分數</th><th>時間</th></tr></thead><tbody>{selectedChild.attempts.slice(0, 10).map((attempt) => <tr key={attempt.id}><td><strong>{attempt.node_code} {attempt.title_zh}</strong></td><td><span className={`status-pill ${attempt.status}`}>{attempt.status === "completed" ? "已完成" : "進行中"}</span></td><td>{attempt.correct_count}／{attempt.total_questions}</td><td><strong>{attempt.score === null ? "—" : `${attempt.score}分`}</strong></td><td>{formatDate(attempt.started_at)}</td></tr>)}</tbody></table></div> : <p className="empty-admin">尚未有練習紀錄。</p>}</section></div>
-            {(parentErrorsLoading || parentErrors.length > 0) && <section className="admin-panel parent-errors-panel"><div className="panel-title"><div><p className="eyebrow">錯題重溫</p><h2>{selectedChild.display_name}的最近錯題</h2></div><span>{parentErrorsLoading ? "載入中…" : `${parentErrors.length}項`}</span></div>{!parentErrorsLoading && <div className="wrong-question-list">{parentErrors.map((error) => <article className="wrong-question-card" key={error.response_id}><div className="wrong-question-head"><div><span className="unit-code">{error.node_code}</span><b>{error.title_zh}</b></div><time>{formatDate(error.answered_at)}</time></div><h3>{renderMarkedText(stripQuestionMetadata(error.question_text))}</h3><div className="answer-comparison"><div className="student-wrong-answer"><span>學生答案</span><strong>{parentAnswerText(error, error.selected_answer)}</strong></div><div className="correct-answer"><span>正確答案</span><strong>{parentAnswerText(error, error.correct_answer)}</strong></div></div>{error.explanation && <div className="explanation-box"><Lightbulb size={18} /><div><strong>解題說明</strong><p>{renderMarkedText(error.explanation)}</p></div></div>}</article>)}</div>}</section>}
-          </>}
-        </>}
-        <footer className="site-footer"><button onClick={openFeedback}>問題回報／意見</button><button onClick={() => setView("privacy")}>私隱聲明</button></footer>
-      </section>
-    </main>;
-  }
 
   if (view === "feedback") return <main className="dashboard-page"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>問題回報與意見</span></div></div><div className="account"><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
@@ -1662,7 +1558,7 @@ export default function Home() {
       <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>帳戶審批管理</span></div></div><div className="account"><span>{profile.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
       <section className="dashboard-wrap admin-wrap">
         <button className="back-button" onClick={() => setView("admin")}><ArrowLeft size={18} />返回成績儀表板</button>
-        <div className="admin-heading student-heading"><div><p className="eyebrow">帳戶與審批</p><h1>P1–P6 學生及家長帳戶管理</h1><p>一次登入，查看所有年級的帳戶；按年級及狀態篩選，再勾選批准。</p></div><div className="admin-heading-actions"><button className="create-student-button" onClick={() => { setShowCreateStudent((value) => !value); setCreateStudentMessage(""); setCreateStudentSuccess(false); }}>{showCreateStudent ? <X size={17} /> : <Plus size={17} />}{showCreateStudent ? "關閉表格" : "新增學生"}</button><button onClick={openStudentManagement} disabled={accountsBusy}>{studentsLoading ? "更新中…" : "更新帳戶資料"}</button></div></div>
+        <div className="admin-heading student-heading"><div><p className="eyebrow">帳戶與審批</p><h1>P1–P6 學生帳戶管理</h1><p>一次登入，查看所有年級的帳戶；按年級及狀態篩選，再勾選批准。</p></div><div className="admin-heading-actions"><button className="create-student-button" onClick={() => { setShowCreateStudent((value) => !value); setCreateStudentMessage(""); setCreateStudentSuccess(false); }}>{showCreateStudent ? <X size={17} /> : <Plus size={17} />}{showCreateStudent ? "關閉表格" : "新增學生"}</button><button onClick={openStudentManagement} disabled={accountsBusy}>{studentsLoading ? "更新中…" : "更新帳戶資料"}</button></div></div>
         {showCreateStudent && <section className="create-student-panel">
           <div className="create-student-title"><div className="create-student-icon"><UserPlus size={24} /></div><div><p className="eyebrow">建立登入帳戶</p><h2>新增一位P3學生</h2><p>學生可立即使用電郵及臨時密碼登入，最多登記兩部裝置。</p></div></div>
           <form className="create-student-form" onSubmit={createStudent}>
@@ -1677,10 +1573,10 @@ export default function Home() {
           <p className="password-reminder">請以安全方式把臨時密碼交給學生，不要在公開群組傳送。</p>
         </section>}
         <div className="student-tools" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-          <div className="student-search"><Search size={18} /><input aria-label="搜尋帳戶" placeholder="搜尋學生或家長姓名／電郵" value={studentSearch} disabled={accountsBusy} onChange={(event) => { setStudentSearch(event.target.value); setSelectedAccountIds([]); }} /></div>
-          <label style={{ display: "grid", gap: 4 }}><span>年級</span><select aria-label="篩選帳戶年級" value={accountGradeFilter} disabled={accountsBusy} onChange={(event) => { setAccountGradeFilter(event.target.value); setSelectedAccountIds([]); }} style={{ padding: "9px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "white", color: "#24334a", font: "inherit" }}><option value="all">全部 P1–P6 及家長</option>{ADMIN_ACCOUNT_GRADES.map((grade) => <option key={grade} value={grade}>{grade}</option>)}<option value="parents">家長帳戶</option></select></label>
+          <div className="student-search"><Search size={18} /><input aria-label="搜尋帳戶" placeholder="搜尋學生姓名／電郵" value={studentSearch} disabled={accountsBusy} onChange={(event) => { setStudentSearch(event.target.value); setSelectedAccountIds([]); }} /></div>
+          <label style={{ display: "grid", gap: 4 }}><span>年級</span><select aria-label="篩選帳戶年級" value={accountGradeFilter} disabled={accountsBusy} onChange={(event) => { setAccountGradeFilter(event.target.value); setSelectedAccountIds([]); }} style={{ padding: "9px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "white", color: "#24334a", font: "inherit" }}><option value="all">全部 P1–P6</option>{ADMIN_ACCOUNT_GRADES.map((grade) => <option key={grade} value={grade}>{grade}</option>)}</select></label>
           <label style={{ display: "grid", gap: 4 }}><span>審批狀態</span><select aria-label="篩選審批狀態" value={accountStatusFilter} disabled={accountsBusy} onChange={(event) => { setAccountStatusFilter(event.target.value); setSelectedAccountIds([]); }} style={{ padding: "9px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "white", color: "#24334a", font: "inherit" }}><option value="all">全部狀態</option><option value="pending">等待批准</option><option value="approved">已批准</option><option value="suspended">已暫停</option></select></label>
-          <div className="student-count"><Users size={18} /><strong>{filteredStudents.length}／{managedStudents.length}</strong><span>個學生／家長帳戶</span></div>
+          <div className="student-count"><Users size={18} /><strong>{filteredStudents.length}／{managedStudents.length}</strong><span>個學生帳戶</span></div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, margin: "12px 0" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" aria-label="選取目前篩選的所有待批帳戶" disabled={accountsBusy || !visiblePendingAccounts.length} checked={visiblePendingAccounts.length > 0 && selectedVisibleAccounts.length === visiblePendingAccounts.length} onChange={(event) => setSelectedAccountIds(event.target.checked ? visiblePendingAccounts.map((account) => account.user_id) : [])} />選取目前篩選的待批帳戶（{visiblePendingAccounts.length}）</label>
@@ -1691,9 +1587,9 @@ export default function Home() {
         {studentsLoading && !managedStudents.length ? <div className="unit-status">正在載入學生帳戶…</div> : <section className="admin-panel student-panel"><div className="admin-table-wrap"><table className="admin-table student-table"><thead><tr><th>選取</th><th>帳戶</th><th>身份／年級</th><th>審批狀態</th><th>裝置</th><th>練習</th><th>平均分</th><th>帳戶操作</th></tr></thead><tbody>{filteredStudents.map((student) => {
               const accountStatus = adminAccountStatus(student);
               const statusLabel = accountStatus === "approved" ? "已批准" : accountStatus === "suspended" ? "已暫停" : "等待批准";
-              return <tr key={student.user_id}><td>{accountStatus === "pending" ? <input type="checkbox" aria-label={`選取 ${student.display_name || student.email}（${student.grade || "家長"}）`} checked={selectedAccountIds.includes(student.user_id)} disabled={accountsBusy} onChange={(event) => setSelectedAccountIds((ids) => event.target.checked ? [...new Set([...ids, student.user_id])] : ids.filter((id) => id !== student.user_id))} /> : "—"}</td><td><button className="student-name-link" onClick={() => student.role === "student" && openStudentDetail(student.user_id, "students")}><strong>{student.display_name || (student.role === "parent" ? "未命名家長" : "未命名學生")}</strong><small>{student.email}</small></button></td><td><strong>{student.role === "parent" ? "家長" : "學生"}</strong><small>{student.grade || "未連結年級"}</small></td><td><span className={`access-pill ${accountStatus === "approved" ? "allowed" : "blocked"}`}>{statusLabel}</span></td><td>{student.role === "student" ? <span className="device-value"><Smartphone size={15} />{student.device_count}／{student.max_devices || 2}</span> : "—"}</td><td>{student.role === "student" ? `${student.completed_count}／${student.attempt_count}` : "—"}</td><td><strong>{student.role === "student" && student.average_score !== null ? `${Math.round(Number(student.average_score))}分` : "—"}</strong></td><td><div className="student-actions">{accountStatus !== "approved" ? <button className="enable-action" disabled={batchApproving || Boolean(studentActionId)} onClick={() => setStudentAccess(student, true)}>{accountStatus === "pending" ? "批准帳戶" : "重新啟用"}</button> : <button className="disable-action" disabled={batchApproving || Boolean(studentActionId)} onClick={() => setStudentAccess(student, false)}>暫停登入</button>}{student.role === "student" && <><button className="detail-action" onClick={() => openStudentDetail(student.user_id, "students")}><BarChart3 size={13} />查看成績</button><button className="reset-action" disabled={batchApproving || Boolean(studentActionId) || Number(student.device_count) === 0} onClick={() => resetStudentDevices(student)}>重設裝置</button><button className="password-action" disabled={batchApproving || Boolean(studentActionId)} onClick={() => { setPasswordResetStudent(student); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); setPasswordResetSuccess(false); window.scrollTo({ top: 260, behavior: "smooth" }); }}><KeyRound size={13} />重設密碼</button></>}</div></td></tr>;
-            })}</tbody></table></div>{!filteredStudents.length && <p className="empty-admin">{managedStudents.length ? "找不到符合搜尋條件的帳戶。" : "目前尚未有學生或家長帳戶。"}</p>}</section>}
-        <aside className="management-note"><UserCog size={21} /><div><strong>安全管理</strong><p>新註冊帳戶須經批准才可存取；暫停登入不會刪除學生的成績或家長連結資料。</p></div></aside>
+              return <tr key={student.user_id}><td>{accountStatus === "pending" ? <input type="checkbox" aria-label={`選取 ${student.display_name || student.email}（${student.grade || "未設定年級"}）`} checked={selectedAccountIds.includes(student.user_id)} disabled={accountsBusy} onChange={(event) => setSelectedAccountIds((ids) => event.target.checked ? [...new Set([...ids, student.user_id])] : ids.filter((id) => id !== student.user_id))} /> : "—"}</td><td><button className="student-name-link" onClick={() => student.role === "student" && openStudentDetail(student.user_id, "students")}><strong>{student.display_name || "未命名學生"}</strong><small>{student.email}</small></button></td><td><strong>學生</strong><small>{student.grade || "未連結年級"}</small></td><td><span className={`access-pill ${accountStatus === "approved" ? "allowed" : "blocked"}`}>{statusLabel}</span></td><td>{student.role === "student" ? <span className="device-value"><Smartphone size={15} />{student.device_count}／{student.max_devices || 2}</span> : "—"}</td><td>{student.role === "student" ? `${student.completed_count}／${student.attempt_count}` : "—"}</td><td><strong>{student.role === "student" && student.average_score !== null ? `${Math.round(Number(student.average_score))}分` : "—"}</strong></td><td><div className="student-actions">{accountStatus !== "approved" ? <button className="enable-action" disabled={batchApproving || Boolean(studentActionId)} onClick={() => setStudentAccess(student, true)}>{accountStatus === "pending" ? "批准帳戶" : "重新啟用"}</button> : <button className="disable-action" disabled={batchApproving || Boolean(studentActionId)} onClick={() => setStudentAccess(student, false)}>暫停登入</button>}{student.role === "student" && <><button className="detail-action" onClick={() => openStudentDetail(student.user_id, "students")}><BarChart3 size={13} />查看成績</button><button className="reset-action" disabled={batchApproving || Boolean(studentActionId) || Number(student.device_count) === 0} onClick={() => resetStudentDevices(student)}>重設裝置</button><button className="password-action" disabled={batchApproving || Boolean(studentActionId)} onClick={() => { setPasswordResetStudent(student); setTemporaryPassword(""); setConfirmTemporaryPassword(""); setPasswordResetMessage(""); setPasswordResetSuccess(false); window.scrollTo({ top: 260, behavior: "smooth" }); }}><KeyRound size={13} />重設密碼</button></>}</div></td></tr>;
+            })}</tbody></table></div>{!filteredStudents.length && <p className="empty-admin">{managedStudents.length ? "找不到符合搜尋條件的帳戶。" : "目前尚未有學生帳戶。"}</p>}</section>}
+        <aside className="management-note"><UserCog size={21} /><div><strong>安全管理</strong><p>新註冊帳戶須經批准才可存取；暫停登入不會刪除學生的成績。</p></div></aside>
       </section>
     </main>;
   }
@@ -1976,7 +1872,6 @@ export default function Home() {
         </button>;
       })}</div>
 
-      {profile?.role === "student" && <section className="student-family-panel student-family-panel-v2"><div className="student-family-heading"><div className="parent-link-icon"><Link2 size={23} /></div><div><strong>家長連結</strong><p>產生一次性邀請碼，或處理家長的連結申請。</p></div><button onClick={createStudentParentCode}>{studentLinkCode ? "重新產生" : "產生邀請碼"}</button></div>{studentLinkCode && <div className="student-code-row"><div><span>一次性邀請碼</span><strong>{studentLinkCode}</strong><small>{studentLinkExpiry ? `${new Intl.DateTimeFormat("zh-HK", { hour: "2-digit", minute: "2-digit" }).format(new Date(studentLinkExpiry))} 前有效` : "30分鐘內有效"}</small></div><p>請只把邀請碼交給你的家長或監護人。家長提交後，仍須由你確認。</p></div>}{studentParentRequests.length > 0 && <div className="student-parent-requests">{studentParentRequests.map((request) => <article key={request.parent_id}><div><span className={`request-state ${request.status}`}>{request.status === "pending" ? "等待確認" : "已連結"}</span><strong>{request.display_name}</strong><small>{request.status === "pending" ? "希望查看你的學習成績及錯題" : "可以查看你的學習紀錄"}</small></div><div>{request.status === "pending" && <button className="approve-request" onClick={() => respondToParentRequest(request.parent_id, true)}>批准</button>}<button className="reject-request" onClick={() => respondToParentRequest(request.parent_id, false)}>{request.status === "pending" ? "拒絕" : "解除"}</button></div></article>)}</div>}{familyLinkMessage && <p className="family-link-message">{familyLinkMessage}</p>}</section>}
 
       <footer className="site-footer student-home-footer"><button onClick={openFeedback}>問題回報／意見</button><button onClick={() => setView("privacy")}>私隱聲明</button></footer>
     </section>
