@@ -1763,11 +1763,11 @@ export default function Home() {
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap english-units">
       <button className="back-button" onClick={showAllSubjects}><ArrowLeft size={18} />查看全部科目</button>
-      <div className="units-heading"><div className="subject-icon blue"><Languages size={25} /></div><div><p className="eyebrow">P3 English</p><h1>Choose a learning unit</h1><p>Complete a 10-question practice. Answers, explanations and mistakes will be recorded automatically.</p></div></div>
-      {englishUnitsLoading && <div className="unit-status">Loading English units…</div>}
+      <div className="units-heading"><div className="subject-icon blue"><Languages size={25} /></div><div><p className="eyebrow">P3 英文 · English</p><h1>選擇學習單元 · Choose a learning unit</h1><p>完成練習後，系統會自動記錄作答結果。 Your results are saved automatically.</p></div></div>
+      {englishUnitsLoading && <div className="unit-status">正在載入英文單元 · Loading English units…</div>}
       {englishUnitsMessage && <div className="unit-status error-message">{englishUnitsMessage}</div>}
-      {!englishUnitsLoading && !englishUnitsMessage && <div className="unit-grid">{englishUnits.map((unit) => <button className="unit-card english-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "english")}><span className="unit-code">{unit.code}</span><h2>{unit.title_en || unit.title_zh}</h2><p>{unit.title_zh}</p><div><span>{unit.curriculum_domains?.title_zh || "Grammar"}</span><span>Start practice</span></div></button>)}</div>}
-      {!englishUnitsLoading && !englishUnitsMessage && englishUnits.length === 0 && <div className="unit-status">No English units are available yet.</div>}
+      {!englishUnitsLoading && !englishUnitsMessage && <div className="unit-grid">{englishUnits.map((unit) => <button className="unit-card english-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "english")}><span className="unit-code">{unit.code}</span><h2>{unit.title_zh}</h2>{unit.title_en && unit.title_en !== unit.title_zh && <p lang="en">{unit.title_en}</p>}<div><span>{/^[1-6]ER/.test(unit.code) ? "閱讀 · Reading" : "文法 · Grammar"}</span><span>開始練習 · Start practice</span></div></button>)}</div>}
+      {!englishUnitsLoading && !englishUnitsMessage && englishUnits.length === 0 && <div className="unit-status">暫未有英文單元 · No English units are available yet.</div>}
     </section>
     <button className="feedback-fab" onClick={openFeedback}><MessageSquareText size={19} />回報問題</button>
   </main>;
