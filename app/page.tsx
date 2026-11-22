@@ -190,6 +190,54 @@ function stripQuestionMetadata(value: string) {
   return cleanLearningText(value);
 }
 
+// ID ranges matched to the English workbook by unit, question order and prompt.
+const englishWorkbookQuestionRanges: ReadonlyArray<readonly [number, number, string, number]> = [
+  [45640,45679,"P3-A01-",45639],
+  [45680,45719,"P3-A02-",45679],
+  [45720,45759,"P3-A03-",45719],
+  [45760,45799,"P3-A04-",45759],
+  [45800,45839,"P3-A05-",45799],
+  [45840,45879,"P3-A06-",45839],
+  [45880,45919,"P3-A07-",45879],
+  [45920,45959,"P3-A08-",45919],
+  [45960,45999,"P3-A09-",45959],
+  [46000,46039,"P3-A10-",45999],
+  [46040,46079,"P3-B01-",46039],
+  [46080,46119,"P3-B02-",46079],
+  [46120,46159,"P3-B03-",46119],
+  [46160,46199,"P3-B04-",46159],
+  [46200,46239,"P3-B05-",46199],
+  [46240,46279,"P3-B06-",46239],
+  [46280,46319,"P3-B07-",46279],
+  [46320,46329,"P3-R01-1-",46319],
+  [46330,46339,"P3-R01-2-",46329],
+  [46340,46349,"P3-R02-1-",46339],
+  [46350,46359,"P3-R02-2-",46349],
+  [46360,46369,"P3-R03-1-",46359],
+  [46370,46379,"P3-R03-2-",46369],
+  [46380,46389,"P3-R04-1-",46379],
+  [46390,46399,"P3-R04-2-",46389],
+  [46400,46409,"P3-R05-1-",46399],
+  [46410,46419,"P3-R05-2-",46409],
+  [46420,46429,"P3-R06-1-",46419],
+  [46430,46439,"P3-R06-2-",46429],
+  [46440,46449,"P3-R07-1-",46439],
+  [46450,46459,"P3-R07-2-",46449],
+  [46460,46469,"P3-R08-1-",46459],
+  [46470,46479,"P3-R08-2-",46469],
+  [46480,46489,"P3-R09-1-",46479],
+  [46490,46499,"P3-R09-2-",46489],
+  [46500,46509,"P3-R10-1-",46499],
+  [46510,46519,"P3-R10-2-",46509],
+];
+
+function englishQuestionIdLabel(questionId: number) {
+  const match = englishWorkbookQuestionRanges.find(([first, last]) => questionId >= first && questionId <= last);
+  if (!match) return `平台題目 ID ${questionId}`;
+  const [, , prefix, offset] = match;
+  return `題目 ID ${prefix}${String(questionId - offset).padStart(3, "0")}`;
+}
+
 function renderMarkedText(value: string) {
   return cleanLearningText(value).split(/((?:[^\u0332]\u0332)+)/g).filter(Boolean).map((part, index) =>
     part.includes("\u0332")
@@ -1730,7 +1778,7 @@ export default function Home() {
         </div>
         <div className="reading-pairs">{readingGroups.map((group) => <section className="reading-pair" key={group.passage}>
           <article className="reading-passage"><span>{activeSubject === "english" ? "Complete Passage" : "完整文章"}</span><div>{renderMarkedText(group.passage)}</div></article>
-          <section className="reading-question-group"><div className="reading-question-group-title"><span>{activeSubject === "english" ? "Questions 1–10" : "第1至10題"}</span><strong>{group.questions.length} 題</strong></div><div className="reading-question-list">{group.questions.map(({ question, prompt }, questionIndex) => { const options = optionsForQuestion(question); const questionNumber = questions.findIndex((item) => item.id === question.id) + 1; return <section className="reading-question" key={question.id}><div className="question-meta"><span>第 {questionNumber || questionIndex + 1} 題</span><span>四選一</span></div><h3>{renderMarkedText(stripQuestionMetadata(prompt))}</h3><div className="option-list">{options.map((option) => <label className={`option ${readingAnswers[question.id] === option.id ? "selected" : ""}`} key={option.id}><input type="radio" name={`answer-${question.id}`} value={option.id} checked={readingAnswers[question.id] === option.id} disabled={readingSubmitted.includes(question.id) || practiceLoading} onChange={() => setReadingAnswers((answers) => ({ ...answers, [question.id]: option.id }))} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>{activeSubject === "english" && readingFeedback[question.id] && <div className="feedback" style={{ marginTop: 16 }}><strong style={{ color: readingFeedback[question.id].is_correct ? "#18794e" : "#b42318" }}>{readingFeedback[question.id].is_correct ? "✓ 答對了" : "✗ 答錯了"}</strong><p>你的答案：{options.find(option => option.id === readingAnswers[question.id])?.label} · {renderMarkedText(options.find(option => option.id === readingAnswers[question.id])?.text || "")}</p><p>正確答案：{options.find(option => option.id === readingFeedback[question.id].correct_answer)?.label} · {renderMarkedText(options.find(option => option.id === readingFeedback[question.id].correct_answer)?.text || "")}</p>{readingFeedback[question.id].explanation && <p>解題分析：{renderMarkedText(readingFeedback[question.id].explanation || "")}</p>}</div>}</section>; })}</div></section>
+          <section className="reading-question-group"><div className="reading-question-group-title"><span>{activeSubject === "english" ? "Questions 1–10" : "第1至10題"}</span><strong>{group.questions.length} 題</strong></div><div className="reading-question-list">{group.questions.map(({ question, prompt }, questionIndex) => { const options = optionsForQuestion(question); const questionNumber = questions.findIndex((item) => item.id === question.id) + 1; return <section className="reading-question" key={question.id}><div className="question-meta"><span>第 {questionNumber || questionIndex + 1} 題{activeSubject === "english" && <> · {englishQuestionIdLabel(question.id)}</>}</span><span>四選一</span></div><h3>{renderMarkedText(stripQuestionMetadata(prompt))}</h3><div className="option-list">{options.map((option) => <label className={`option ${readingAnswers[question.id] === option.id ? "selected" : ""}`} key={option.id}><input type="radio" name={`answer-${question.id}`} value={option.id} checked={readingAnswers[question.id] === option.id} disabled={readingSubmitted.includes(question.id) || practiceLoading} onChange={() => setReadingAnswers((answers) => ({ ...answers, [question.id]: option.id }))} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>{activeSubject === "english" && readingFeedback[question.id] && <div className="feedback" style={{ marginTop: 16 }}><strong style={{ color: readingFeedback[question.id].is_correct ? "#18794e" : "#b42318" }}>{readingFeedback[question.id].is_correct ? "✓ 答對了" : "✗ 答錯了"}</strong><p>你的答案：{options.find(option => option.id === readingAnswers[question.id])?.label} · {renderMarkedText(options.find(option => option.id === readingAnswers[question.id])?.text || "")}</p><p>正確答案：{options.find(option => option.id === readingFeedback[question.id].correct_answer)?.label} · {renderMarkedText(options.find(option => option.id === readingFeedback[question.id].correct_answer)?.text || "")}</p>{readingFeedback[question.id].explanation && <p>解題分析：{renderMarkedText(readingFeedback[question.id].explanation || "")}</p>}</div>}</section>; })}</div></section>
         </section>)}</div>
         <div className="reading-submit-bar">{activeSubject === "english" && completedResult ? <><span>批改完成，請查看所有答案及解題分析。</span><button className="submit-answer" onClick={() => { setView("complete"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>完成練習</button></> : <><span>{questions.every((question) => readingAnswers[question.id]) ? "已完成所有題目，可以提交。" : `尚有 ${questions.filter((question) => !readingAnswers[question.id]).length} 題未作答`}</span><button className="submit-answer" disabled={questions.some((question) => !readingAnswers[question.id]) || practiceLoading} onClick={submitReadingAnswers}>{practiceLoading ? "正在批改…" : "提交全部答案"}</button></>}</div>
       </section>}
@@ -1739,7 +1787,7 @@ export default function Home() {
         <div className="writing-guidance"><strong>寫作提示</strong><div>{writingPrompt.guidance.map((item) => <span key={item}>{item}</span>)}</div></div>
         {!writingResult ? <><textarea className="writing-editor" value={writingContent} onChange={(event) => setWritingContent(event.target.value)} placeholder="在這裏輸入作文……&#10;&#10;建議按內容分段，完成後再檢查錯別字和標點。" rows={18} disabled={practiceLoading} /><div className="writing-actions"><span>{writingCharCount < 50 ? `最少還需 ${50 - writingCharCount} 字才可提交` : "可以提交；系統會儲存全文並按四項準則評改。"}</span><button className="submit-answer" disabled={writingCharCount < 50 || practiceLoading} onClick={submitWritingTask}>{practiceLoading ? "正在儲存及評改…" : "提交作文"}</button></div></> : <div className="writing-result"><div className="writing-score"><span>自動評改</span><strong>{writingResult.score}<small>／100</small></strong><p>{writingResult.char_count} 字 · 作文已儲存</p></div><div className="writing-rubric">{Object.entries(writingResult.rubric).map(([name, score]) => <div key={name}><span>{name}</span><strong>{score}</strong></div>)}</div><div className="writing-feedback"><Lightbulb size={20} /><div><strong>改善建議</strong><p>{writingResult.feedback}</p><small>這是按篇幅、段落、標點和題目重點作出的初步評估；老師評語及分數會以人工評閱為準。</small></div></div><button className="retry-button" onClick={() => startWritingTask(activeUnit!)}><RotateCcw size={18} />抽選另一題</button></div>}
       </section>}
-      {!isReadingUnit && !isWritingUnit && currentQuestion && <section className="question-card"><div className="practice-progress"><span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} /></div><div className="question-meta"><span>第 {currentIndex + 1} 題／共 {questions.length} 題</span><span>四選一</span></div><h2>{renderMarkedText(stripQuestionMetadata(currentQuestion.question_text))}</h2><QuestionTopicCard text={currentQuestion.question_text} /><QuestionDataDiagramView text={currentQuestion.question_text} unitCode={activeUnit?.code || ""} /><div className="option-list">{displayedOptions.map((option) => <label className={`option ${selectedAnswer === option.id ? "selected" : ""} ${feedback ? "locked" : ""}`} key={option.id}><input type="radio" name="answer" value={option.id} checked={selectedAnswer === option.id} disabled={!!feedback} onChange={() => setSelectedAnswer(option.id)} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>
+      {!isReadingUnit && !isWritingUnit && currentQuestion && <section className="question-card"><div className="practice-progress"><span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} /></div><div className="question-meta"><span>第 {currentIndex + 1} 題／共 {questions.length} 題{activeSubject === "english" && <> · {englishQuestionIdLabel(currentQuestion.id)}</>}</span><span>四選一</span></div><h2>{renderMarkedText(stripQuestionMetadata(currentQuestion.question_text))}</h2><QuestionTopicCard text={currentQuestion.question_text} /><QuestionDataDiagramView text={currentQuestion.question_text} unitCode={activeUnit?.code || ""} /><div className="option-list">{displayedOptions.map((option) => <label className={`option ${selectedAnswer === option.id ? "selected" : ""} ${feedback ? "locked" : ""}`} key={option.id}><input type="radio" name="answer" value={option.id} checked={selectedAnswer === option.id} disabled={!!feedback} onChange={() => setSelectedAnswer(option.id)} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>
         {!feedback && <button className="submit-answer" disabled={!selectedAnswer || practiceLoading} onClick={submitAnswer}>{practiceLoading ? "批改中…" : "提交答案"}</button>}
         {feedback && <div className={`feedback ${feedback.is_correct ? "correct" : "incorrect"}`}><h3>{feedback.is_correct ? "答對了！" : "答案不正確"}</h3><p>正確答案：{displayedOptions.find((option) => option.id === feedback.correct_answer)?.label} · {renderMarkedText(displayedOptions.find((option) => option.id === feedback.correct_answer)?.text || "")}</p>{feedback.explanation && <p>{renderMarkedText(feedback.explanation)}</p>}<button className="next-question" onClick={nextQuestion}>{feedback.completed ? "查看成績" : "下一題"}</button></div>}
       </section>}
