@@ -231,6 +231,28 @@ const englishWorkbookQuestionRanges: ReadonlyArray<readonly [number, number, str
   [46510,46519,"P3-R10-2-",46509],
 ];
 
+const generalStudiesWorkbookFirstIds: Record<string, number> = {
+  "3GSN01": 58630,
+  "3GSN02": 58710,
+  "3GSN03": 58790,
+  "3GSN04": 58870,
+  "3GSN05": 58950,
+  "3GSN06": 59030,
+  "3GSN07": 59110,
+  "3GSN08": 59190,
+  "3GSN09": 59270,
+  "3GSN10": 59350,
+  "3GSN11": 59430,
+  "3GSN12": 59510,
+};
+
+function generalStudiesWorkbookReference(unitCode: string | undefined, questionId: number) {
+  if (!unitCode) return null;
+  const first = generalStudiesWorkbookFirstIds[unitCode];
+  if (first === undefined || questionId < first || questionId >= first + 80) return null;
+  return `P3-GS-${unitCode.slice(-2)}-${String(questionId - first + 1).padStart(3, "0")}`;
+}
+
 function englishQuestionIdLabel(questionId: number) {
   const match = englishWorkbookQuestionRanges.find(([first, last]) => questionId >= first && questionId <= last);
   if (!match) return `平台題目 ID ${questionId}`;
@@ -1787,7 +1809,7 @@ export default function Home() {
         <div className="writing-guidance"><strong>寫作提示</strong><div>{writingPrompt.guidance.map((item) => <span key={item}>{item}</span>)}</div></div>
         {!writingResult ? <><textarea className="writing-editor" value={writingContent} onChange={(event) => setWritingContent(event.target.value)} placeholder="在這裏輸入作文……&#10;&#10;建議按內容分段，完成後再檢查錯別字和標點。" rows={18} disabled={practiceLoading} /><div className="writing-actions"><span>{writingCharCount < 50 ? `最少還需 ${50 - writingCharCount} 字才可提交` : "可以提交；系統會儲存全文並按四項準則評改。"}</span><button className="submit-answer" disabled={writingCharCount < 50 || practiceLoading} onClick={submitWritingTask}>{practiceLoading ? "正在儲存及評改…" : "提交作文"}</button></div></> : <div className="writing-result"><div className="writing-score"><span>自動評改</span><strong>{writingResult.score}<small>／100</small></strong><p>{writingResult.char_count} 字 · 作文已儲存</p></div><div className="writing-rubric">{Object.entries(writingResult.rubric).map(([name, score]) => <div key={name}><span>{name}</span><strong>{score}</strong></div>)}</div><div className="writing-feedback"><Lightbulb size={20} /><div><strong>改善建議</strong><p>{writingResult.feedback}</p><small>這是按篇幅、段落、標點和題目重點作出的初步評估；老師評語及分數會以人工評閱為準。</small></div></div><button className="retry-button" onClick={() => startWritingTask(activeUnit!)}><RotateCcw size={18} />抽選另一題</button></div>}
       </section>}
-      {!isReadingUnit && !isWritingUnit && currentQuestion && <section className="question-card"><div className="practice-progress"><span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} /></div><div className="question-meta"><span>第 {currentIndex + 1} 題／共 {questions.length} 題{activeSubject === "english" && <> · {englishQuestionIdLabel(currentQuestion.id)}</>}</span><span>四選一</span></div><h2>{renderMarkedText(stripQuestionMetadata(currentQuestion.question_text))}</h2><QuestionTopicCard text={currentQuestion.question_text} /><QuestionDataDiagramView text={currentQuestion.question_text} unitCode={activeUnit?.code || ""} /><div className="option-list">{displayedOptions.map((option) => <label className={`option ${selectedAnswer === option.id ? "selected" : ""} ${feedback ? "locked" : ""}`} key={option.id}><input type="radio" name="answer" value={option.id} checked={selectedAnswer === option.id} disabled={!!feedback} onChange={() => setSelectedAnswer(option.id)} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>
+      {!isReadingUnit && !isWritingUnit && currentQuestion && <section className="question-card"><div className="practice-progress"><span style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} /></div><div className="question-meta"><span>第 {currentIndex + 1} 題／共 {questions.length} 題{activeSubject === "english" && <> · {englishQuestionIdLabel(currentQuestion.id)}</>}{generalStudiesWorkbookReference(activeUnit?.code, currentQuestion.id) && <> · 題目 ID {generalStudiesWorkbookReference(activeUnit?.code, currentQuestion.id)}</>}</span><span>四選一</span></div><h2>{renderMarkedText(stripQuestionMetadata(currentQuestion.question_text))}</h2><QuestionTopicCard text={currentQuestion.question_text} /><QuestionDataDiagramView text={currentQuestion.question_text} unitCode={activeUnit?.code || ""} /><div className="option-list">{displayedOptions.map((option) => <label className={`option ${selectedAnswer === option.id ? "selected" : ""} ${feedback ? "locked" : ""}`} key={option.id}><input type="radio" name="answer" value={option.id} checked={selectedAnswer === option.id} disabled={!!feedback} onChange={() => setSelectedAnswer(option.id)} /><strong>{option.label}</strong><span>{renderMarkedText(option.text)}</span></label>)}</div>
         {!feedback && <button className="submit-answer" disabled={!selectedAnswer || practiceLoading} onClick={submitAnswer}>{practiceLoading ? "批改中…" : "提交答案"}</button>}
         {feedback && <div className={`feedback ${feedback.is_correct ? "correct" : "incorrect"}`}><h3>{feedback.is_correct ? "答對了！" : "答案不正確"}</h3><p>正確答案：{displayedOptions.find((option) => option.id === feedback.correct_answer)?.label} · {renderMarkedText(displayedOptions.find((option) => option.id === feedback.correct_answer)?.text || "")}</p>{feedback.explanation && <p>{renderMarkedText(feedback.explanation)}</p>}<button className="next-question" onClick={nextQuestion}>{feedback.completed ? "查看成績" : "下一題"}</button></div>}
       </section>}
@@ -1835,13 +1857,17 @@ export default function Home() {
 
   if (view === "generalStudies") {
     const units = generalStudiesUnits;
+    const reviewedUnits = units.filter(unit => /^3GSN(?:0[1-9]|1[0-2])$/.test(unit.code)).sort((a, b) => a.code.localeCompare(b.code));
     const practicesByCode = new Map(units.map(unit => [unit.code, unit]));
     return <main className="dashboard-page learning-flow-v2 subject-generalStudies"><TwinkoGuide view={view} answerCorrect={feedback?.is_correct ?? null} />
     <header className="topbar"><div className="brand"><div className="brand-mark small">S+</div><div><strong>SENPlus+</strong><span>Academy Ultra · P3</span></div></div><div className="account"><span>{profile?.display_name || session.user.email}</span><button onClick={signOut}><LogOut size={17} />登出</button></div></header>
     <section className="dashboard-wrap units-wrap general-studies-units">
       <button className="back-button" onClick={showAllSubjects}><ArrowLeft size={18} />查看全部科目</button>
-      <div className="units-heading"><div className="subject-icon amber"><Compass size={25} /></div><div><p className="eyebrow">P3 常識科</p><h1>選擇學習單元</h1><p>按冊次選擇常識科課題，每次完成10題練習。</p></div></div>
-      <div className="mb-8 flex flex-col gap-8">
+      <div className="units-heading"><div className="subject-icon amber"><Compass size={25} /></div><div><p className="eyebrow">P3 常識科</p><h1>選擇學習單元</h1><p>選擇常識科單元，每次完成10題練習。</p></div></div>
+      {reviewedUnits.length === 12 ? <div className="unit-grid">{reviewedUnits.map(unit => <button className="unit-card general-studies-unit-card enabled" key={unit.id} type="button" onClick={() => startUnit(unit, "generalStudies")}>
+        <span className="unit-code">{unit.code.slice(-2)}</span><h2>{unit.title_zh}</h2>
+        <div><span>常識科</span><span>開始練習</span></div>
+      </button>)}</div> : <div className="mb-8 flex flex-col gap-8">
         {generalStudiesBooks.map(book => <section key={book.code} aria-labelledby={`gs-book-${book.code}`}>
           <h2 id={`gs-book-${book.code}`} className="mb-4 text-2xl font-bold">{book.code} {book.title}</h2>
           {book.units.map(group => <section key={group.title} className="mb-6 last:mb-0" aria-label={group.title}>
@@ -1860,7 +1886,7 @@ export default function Home() {
             </div>
           </section>)}
         </section>)}
-      </div>
+      </div>}
       {generalStudiesUnitsLoading && <div className="unit-status">正在載入常識科單元…</div>}
       {generalStudiesUnitsMessage && <div className="unit-status error-message">{generalStudiesUnitsMessage}</div>}
       {!generalStudiesUnitsLoading && !generalStudiesUnitsMessage && units.length === 0 && <div className="unit-status">目前尚未建立常識科單元。</div>}
